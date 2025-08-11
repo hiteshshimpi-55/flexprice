@@ -759,6 +759,18 @@ func (r *UpdateInvoiceRequest) Validate() error {
 	return nil
 }
 
+// CreateNextBillingPeriodInvoiceRequest represents the request payload for creating an invoice for the current billing period with latest usage
+type CreateNextBillingPeriodInvoiceRequest struct {
+	// subscription_id is the unique identifier of the subscription to create an invoice for
+	SubscriptionID string `json:"subscription_id" binding:"required"`
+
+	// finalize indicates whether the invoice should be finalized after creation (default: true)
+	Finalize *bool `json:"finalize,omitempty"`
+
+	// reference_point defines the point in time used for calculating usage and charges (default: period_end)
+	ReferencePoint *types.InvoiceReferencePoint `json:"reference_point,omitempty"`
+}
+
 // InvoiceResponse represents the response payload containing invoice information
 type InvoiceResponse struct {
 	// id is the unique identifier for this invoice

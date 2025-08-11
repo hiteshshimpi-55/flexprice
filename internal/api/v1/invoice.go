@@ -499,3 +499,34 @@ func (h *InvoiceHandler) ListInvoicesByFilter(c *gin.Context) {
 
 	c.JSON(http.StatusOK, resp)
 }
+
+// CreateNextBillingPeriodInvoice godoc
+// @Summary Create an invoice for the current billing period with latest usage
+// @Description Create an invoice for the current billing period of a subscription, including all ingested events up to now
+// @Tags Invoices
+// @Accept json
+// @Produce json
+// @Param request body dto.CreateNextBillingPeriodInvoiceRequest true "Current Period Invoice Request"
+// @Success 201 {object} dto.InvoiceResponse
+// @Failure 400 {object} ierr.ErrorResponse
+// @Failure 500 {object} ierr.ErrorResponse
+// @Router /invoices/next-billing-period [post]
+func (h *InvoiceHandler) CreateNextBillingPeriodInvoice(c *gin.Context) {
+	var req dto.CreateNextBillingPeriodInvoiceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Error("Failed to bind request body", "error", err)
+		c.Error(ierr.WithError(err).WithHint("invalid request body").Mark(ierr.ErrValidation))
+		return
+	}
+
+	resp, err := h.invoiceService.CreateNextBillingPeriodInvoice(c.Request.Context(), req)
+	if err != nil {
+		h.logger.Error("Failed to create current period invoice with latest usage",
+			"error", err,
+			"subscription_id", req.SubscriptionID)
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, resp)
+}

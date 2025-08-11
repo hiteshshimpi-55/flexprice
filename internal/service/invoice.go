@@ -22,6 +22,7 @@ import (
 )
 
 type InvoiceService interface {
+	CreateNextBillingPeriodInvoice(ctx context.Context, req dto.CreateNextBillingPeriodInvoiceRequest) (*dto.InvoiceResponse, error)
 	CreateOneOffInvoice(ctx context.Context, req dto.CreateInvoiceRequest) (*dto.InvoiceResponse, error)
 	CreateInvoice(ctx context.Context, req dto.CreateInvoiceRequest) (*dto.InvoiceResponse, error)
 	GetInvoice(ctx context.Context, id string) (*dto.InvoiceResponse, error)
@@ -55,6 +56,96 @@ func NewInvoiceService(params ServiceParams) InvoiceService {
 	}
 }
 
+func (s *invoiceService) CreateNextBillingPeriodInvoice(ctx context.Context, req dto.CreateNextBillingPeriodInvoiceRequest) (*dto.InvoiceResponse, error) {
+	s.Logger.Infow("creating invoice for current billing period with latest usage",
+		"subscription_id", req.SubscriptionID,
+		"finalize", req.Finalize,
+		"reference_point", req.ReferencePoint)
+
+	// Get the subscription
+	subscription, _, err := s.SubRepo.GetWithLineItems(ctx, req.SubscriptionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate subscription is active
+	if subscription.SubscriptionStatus != types.SubscriptionStatusActive {
+		return nil, ierr.NewError("subscription is not active").
+			WithHint("Only active subscriptions can generate invoices for next billing period").
+			WithReportableDetails(map[string]interface{}{
+				"subscription_id":     subscription.ID,
+				"subscription_status": subscription.SubscriptionStatus,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Use current billing period dates to capture all ingested events for this period
+	currentPeriodStart := subscription.CurrentPeriodStart
+	currentPeriodEnd := subscription.CurrentPeriodEnd
+
+	// Set default reference point if not provided
+	// Use period_end reference point to include current period usage charges (arrear)
+	referencePoint := types.ReferencePointPeriodEnd
+	if req.ReferencePoint != nil {
+		referencePoint = *req.ReferencePoint
+	}
+
+	// Set default finalize flag if not provided
+	shouldFinalize := true
+	if req.Finalize != nil {
+		shouldFinalize = *req.Finalize
+	}
+
+	// Check if we've reached subscription end date
+	if subscription.EndDate != nil && currentPeriodStart.After(*subscription.EndDate) {
+		return nil, ierr.NewError("subscription has ended").
+			WithHint("Cannot generate invoice for current billing period - subscription has ended").
+			WithReportableDetails(map[string]interface{}{
+				"subscription_id":      subscription.ID,
+				"subscription_end":     subscription.EndDate,
+				"current_period_start": currentPeriodStart,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Create the subscription invoice request
+	subscriptionInvoiceReq := &dto.CreateSubscriptionInvoiceRequest{
+		SubscriptionID: req.SubscriptionID,
+		PeriodStart:    currentPeriodStart,
+		PeriodEnd:      currentPeriodEnd,
+		IsPreview:      false,
+		ReferencePoint: referencePoint,
+	}
+
+	s.Logger.Infow("creating invoice for current billing period with latest usage",
+		"subscription_id", req.SubscriptionID,
+		"current_period_start", currentPeriodStart,
+		"current_period_end", currentPeriodEnd,
+		"reference_point", referencePoint,
+		"finalize", shouldFinalize)
+
+	// Create the invoice
+	inv, err := s.CreateSubscriptionInvoice(ctx, subscriptionInvoiceReq)
+	if err != nil {
+		return nil, err
+	}
+
+	// Finalize the invoice if requested (and if it's not already finalized)
+	if shouldFinalize && inv.InvoiceStatus == types.InvoiceStatusDraft {
+		if err := s.FinalizeInvoice(ctx, inv.ID); err != nil {
+			s.Logger.Errorw("failed to finalize current period invoice",
+				"error", err,
+				"invoice_id", inv.ID,
+				"subscription_id", req.SubscriptionID)
+			return nil, err
+		}
+
+		// Return the updated invoice after finalization
+		return s.GetInvoice(ctx, inv.ID)
+	}
+
+	return inv, nil
+}
 func (s *invoiceService) CreateOneOffInvoice(ctx context.Context, req dto.CreateInvoiceRequest) (*dto.InvoiceResponse, error) {
 
 	// Here we validate all the coupons and then pass them to CreateInvoice Service.
@@ -1542,7 +1633,7 @@ func (s *invoiceService) RecalculateInvoice(ctx context.Context, id string, fina
 		// STEP 4: Create new line items from the fresh calculation
 		newLineItems := make([]*invoice.InvoiceLineItem, len(newInvoiceReq.LineItems))
 		for i, lineItemReq := range newInvoiceReq.LineItems {
-			
+
 			lineItem := &invoice.InvoiceLineItem{
 				ID:              types.GenerateUUIDWithPrefix(types.UUID_PREFIX_INVOICE_LINE_ITEM),
 				InvoiceID:       inv.ID,
