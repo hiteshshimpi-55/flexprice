@@ -88,6 +88,11 @@ var commands = []Command{
 		Description: "Add a new user to a tenant",
 		Run:         internal.AddNewUserToTenant,
 	},
+	{
+		Name:        "copy-plan-charges-to-addons",
+		Description: "Copy all charges (prices) from plans to addons",
+		Run:         internal.CopyPlanChargesToAddons,
+	},
 }
 
 // runBulkReprocessEventsCommand wraps the bulk reprocess events with command line parameters
