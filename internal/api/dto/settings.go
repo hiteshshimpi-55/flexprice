@@ -30,30 +30,6 @@ type UpdateSettingRequest struct {
 	Value *map[string]interface{} `json:"value,omitempty"`
 }
 
-// UpsertSettingRequest represents the request to upsert a setting (create or update)
-type UpsertSettingRequest struct {
-	Key   string                 `json:"key" validate:"required,min=1,max=255"`
-	Value map[string]interface{} `json:"value" validate:"required"`
-}
-
-// CreateSettingsBulkRequest represents the request to create multiple settings
-type CreateSettingsBulkRequest struct {
-	Settings []*CreateSettingRequest `json:"settings" validate:"required,min=1,max=100,dive"`
-}
-
-// ListSettingsResponse represents the response for listing settings
-type ListSettingsResponse struct {
-	Settings []*SettingResponse `json:"settings"`
-	Count    int                `json:"count"`
-	HasMore  bool               `json:"has_more"`
-}
-
-// BulkSettingsResponse represents the response for bulk operations
-type BulkSettingsResponse struct {
-	Settings []*SettingResponse `json:"settings"`
-	Count    int                `json:"count"`
-}
-
 // SettingFromDomain converts a domain setting to DTO
 func SettingFromDomain(s *settings.Setting) *SettingResponse {
 	if s == nil {

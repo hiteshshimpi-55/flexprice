@@ -37,7 +37,7 @@ func FromEnt(s *ent.Settings) *Setting {
 		for k, v := range s.Value {
 			// Try to unmarshal as JSON, fallback to string
 			var jsonValue interface{}
-			if err := json.Unmarshal([]byte(v), &jsonValue); err != nil {
+			if err := json.Unmarshal([]byte(v.(string)), &jsonValue); err != nil {
 				jsonValue = v // Fallback to string value
 			}
 			value[k] = jsonValue
@@ -72,27 +72,6 @@ func FromEntList(settings []*ent.Settings) []*Setting {
 	}
 
 	return result
-}
-
-// ToEntValue converts the domain value to ent-compatible format
-func (s *Setting) ToEntValue() (map[string]string, error) {
-	if s.Value == nil {
-		return nil, nil
-	}
-
-	entValue := make(map[string]string)
-	for k, v := range s.Value {
-		// Convert interface{} to JSON string
-		jsonBytes, err := json.Marshal(v)
-		if err != nil {
-			return nil, ierr.WithError(err).
-				WithHintf("failed to marshal value for key '%s'", k).
-				Mark(ierr.ErrValidation)
-		}
-		entValue[k] = string(jsonBytes)
-	}
-
-	return entValue, nil
 }
 
 // GetValue retrieves a value by key and unmarshals it into the target

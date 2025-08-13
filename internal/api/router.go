@@ -309,10 +309,6 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 		// Settings routes
 		settings := v1Private.Group("/settings")
 		{
-			settings.POST("", handlers.Settings.CreateSetting)
-			settings.GET("/:id", handlers.Settings.GetSetting)
-			settings.PUT("/:id", handlers.Settings.UpdateSetting)
-			settings.DELETE("/:id", handlers.Settings.DeleteSetting)
 
 			// Key-based operations
 			settings.GET("/key/:key", handlers.Settings.GetSettingByKey)

@@ -15,5 +15,6 @@ type Repository interface {
 
 	// Operations by key
 	GetByKey(ctx context.Context, key string) (*Setting, error)
+	DeleteByKey(ctx context.Context, key string) error
 	UpsertByKey(ctx context.Context, setting *Setting) error
 }
