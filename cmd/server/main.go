@@ -143,6 +143,7 @@ func main() {
 			repository.NewCouponAssociationRepository,
 			repository.NewCouponApplicationRepository,
 			repository.NewPriceUnitRepository,
+			repository.NewSettingsRepository,
 
 			// PubSub
 			pubsubRouter.NewRouter,
@@ -191,6 +192,7 @@ func main() {
 			service.NewCreditNoteService,
 			service.NewCouponService,
 			service.NewPriceUnitService,
+			service.NewSettingsService,
 		),
 	)
 
@@ -243,6 +245,7 @@ func provideHandlers(
 	priceUnitService *service.PriceUnitService,
 	svixClient *svix.Client,
 	couponService service.CouponService,
+	settingsService service.SettingsService,
 ) api.Handlers {
 	return api.Handlers{
 		Events:            v1.NewEventsHandler(eventService, eventPostProcessingService, logger),
@@ -274,6 +277,7 @@ func provideHandlers(
 		PriceUnit:         v1.NewPriceUnitHandler(priceUnitService, logger),
 		Webhook:           v1.NewWebhookHandler(cfg, svixClient, logger),
 		Coupon:            v1.NewCouponHandler(couponService, logger),
+		Settings:          v1.NewSettingsHandler(settingsService, logger),
 	}
 }
 

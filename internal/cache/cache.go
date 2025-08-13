@@ -48,6 +48,7 @@ const (
 	PrefixCoupon                 = "coupon:v1:"
 	PrefixCouponAssociation      = "couponassociation:v1:"
 	PrefixCouponApplication      = "couponapplication:v1:"
+	PrefixSettings               = "settings:v1:"
 )
 
 // GenerateKey creates a cache key from a prefix and a set of parameters

@@ -39,6 +39,7 @@ type Handlers struct {
 	Coupon            *v1.CouponHandler
 	PriceUnit         *v1.PriceUnitHandler
 	Webhook           *v1.WebhookHandler
+	Settings          *v1.SettingsHandler
 	// Portal handlers
 	Onboarding *v1.OnboardingHandler
 	// Cron jobs : TODO: move crons out of API based architecture
@@ -303,6 +304,19 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 				integrations.GET("/:provider", handlers.Secret.GetIntegration)
 				integrations.DELETE("/:id", handlers.Secret.DeleteIntegration)
 			}
+		}
+
+		// Settings routes
+		settings := v1Private.Group("/settings")
+		{
+			settings.POST("", handlers.Settings.CreateSetting)
+			settings.GET("/:id", handlers.Settings.GetSetting)
+			settings.PUT("/:id", handlers.Settings.UpdateSetting)
+			settings.DELETE("/:id", handlers.Settings.DeleteSetting)
+
+			// Key-based operations
+			settings.GET("/key/:key", handlers.Settings.GetSettingByKey)
+			settings.PUT("/key/:key", handlers.Settings.UpdateSettingByKey)
 		}
 
 		// Cost sheet routes
