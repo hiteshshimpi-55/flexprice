@@ -70,23 +70,23 @@ func (sliu *SubscriptionLineItemUpdate) ClearUpdatedBy() *SubscriptionLineItemUp
 	return sliu
 }
 
-// SetPlanID sets the "plan_id" field.
-func (sliu *SubscriptionLineItemUpdate) SetPlanID(s string) *SubscriptionLineItemUpdate {
-	sliu.mutation.SetPlanID(s)
+// SetEntityID sets the "entity_id" field.
+func (sliu *SubscriptionLineItemUpdate) SetEntityID(s string) *SubscriptionLineItemUpdate {
+	sliu.mutation.SetEntityID(s)
 	return sliu
 }
 
-// SetNillablePlanID sets the "plan_id" field if the given value is not nil.
-func (sliu *SubscriptionLineItemUpdate) SetNillablePlanID(s *string) *SubscriptionLineItemUpdate {
+// SetNillableEntityID sets the "entity_id" field if the given value is not nil.
+func (sliu *SubscriptionLineItemUpdate) SetNillableEntityID(s *string) *SubscriptionLineItemUpdate {
 	if s != nil {
-		sliu.SetPlanID(*s)
+		sliu.SetEntityID(*s)
 	}
 	return sliu
 }
 
-// ClearPlanID clears the value of the "plan_id" field.
-func (sliu *SubscriptionLineItemUpdate) ClearPlanID() *SubscriptionLineItemUpdate {
-	sliu.mutation.ClearPlanID()
+// ClearEntityID clears the value of the "entity_id" field.
+func (sliu *SubscriptionLineItemUpdate) ClearEntityID() *SubscriptionLineItemUpdate {
+	sliu.mutation.ClearEntityID()
 	return sliu
 }
 
@@ -489,11 +489,11 @@ func (sliu *SubscriptionLineItemUpdate) sqlSave(ctx context.Context) (n int, err
 	if sliu.mutation.EnvironmentIDCleared() {
 		_spec.ClearField(subscriptionlineitem.FieldEnvironmentID, field.TypeString)
 	}
-	if value, ok := sliu.mutation.PlanID(); ok {
-		_spec.SetField(subscriptionlineitem.FieldPlanID, field.TypeString, value)
+	if value, ok := sliu.mutation.EntityID(); ok {
+		_spec.SetField(subscriptionlineitem.FieldEntityID, field.TypeString, value)
 	}
-	if sliu.mutation.PlanIDCleared() {
-		_spec.ClearField(subscriptionlineitem.FieldPlanID, field.TypeString)
+	if sliu.mutation.EntityIDCleared() {
+		_spec.ClearField(subscriptionlineitem.FieldEntityID, field.TypeString)
 	}
 	if value, ok := sliu.mutation.PlanDisplayName(); ok {
 		_spec.SetField(subscriptionlineitem.FieldPlanDisplayName, field.TypeString, value)
@@ -681,23 +681,23 @@ func (sliuo *SubscriptionLineItemUpdateOne) ClearUpdatedBy() *SubscriptionLineIt
 	return sliuo
 }
 
-// SetPlanID sets the "plan_id" field.
-func (sliuo *SubscriptionLineItemUpdateOne) SetPlanID(s string) *SubscriptionLineItemUpdateOne {
-	sliuo.mutation.SetPlanID(s)
+// SetEntityID sets the "entity_id" field.
+func (sliuo *SubscriptionLineItemUpdateOne) SetEntityID(s string) *SubscriptionLineItemUpdateOne {
+	sliuo.mutation.SetEntityID(s)
 	return sliuo
 }
 
-// SetNillablePlanID sets the "plan_id" field if the given value is not nil.
-func (sliuo *SubscriptionLineItemUpdateOne) SetNillablePlanID(s *string) *SubscriptionLineItemUpdateOne {
+// SetNillableEntityID sets the "entity_id" field if the given value is not nil.
+func (sliuo *SubscriptionLineItemUpdateOne) SetNillableEntityID(s *string) *SubscriptionLineItemUpdateOne {
 	if s != nil {
-		sliuo.SetPlanID(*s)
+		sliuo.SetEntityID(*s)
 	}
 	return sliuo
 }
 
-// ClearPlanID clears the value of the "plan_id" field.
-func (sliuo *SubscriptionLineItemUpdateOne) ClearPlanID() *SubscriptionLineItemUpdateOne {
-	sliuo.mutation.ClearPlanID()
+// ClearEntityID clears the value of the "entity_id" field.
+func (sliuo *SubscriptionLineItemUpdateOne) ClearEntityID() *SubscriptionLineItemUpdateOne {
+	sliuo.mutation.ClearEntityID()
 	return sliuo
 }
 
@@ -1130,11 +1130,11 @@ func (sliuo *SubscriptionLineItemUpdateOne) sqlSave(ctx context.Context) (_node 
 	if sliuo.mutation.EnvironmentIDCleared() {
 		_spec.ClearField(subscriptionlineitem.FieldEnvironmentID, field.TypeString)
 	}
-	if value, ok := sliuo.mutation.PlanID(); ok {
-		_spec.SetField(subscriptionlineitem.FieldPlanID, field.TypeString, value)
+	if value, ok := sliuo.mutation.EntityID(); ok {
+		_spec.SetField(subscriptionlineitem.FieldEntityID, field.TypeString, value)
 	}
-	if sliuo.mutation.PlanIDCleared() {
-		_spec.ClearField(subscriptionlineitem.FieldPlanID, field.TypeString)
+	if sliuo.mutation.EntityIDCleared() {
+		_spec.ClearField(subscriptionlineitem.FieldEntityID, field.TypeString)
 	}
 	if value, ok := sliuo.mutation.PlanDisplayName(); ok {
 		_spec.SetField(subscriptionlineitem.FieldPlanDisplayName, field.TypeString, value)

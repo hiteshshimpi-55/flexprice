@@ -2,7 +2,10 @@ package service
 
 import (
 	"github.com/flexprice/flexprice/internal/config"
+	"github.com/flexprice/flexprice/internal/domain/addon"
+	"github.com/flexprice/flexprice/internal/domain/addonassociation"
 	"github.com/flexprice/flexprice/internal/domain/auth"
+	"github.com/flexprice/flexprice/internal/domain/connection"
 	costsheet "github.com/flexprice/flexprice/internal/domain/costsheet"
 	"github.com/flexprice/flexprice/internal/domain/coupon"
 	"github.com/flexprice/flexprice/internal/domain/coupon_application"
@@ -12,6 +15,7 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/creditnote"
 	"github.com/flexprice/flexprice/internal/domain/customer"
 	"github.com/flexprice/flexprice/internal/domain/entitlement"
+	"github.com/flexprice/flexprice/internal/domain/entityintegrationmapping"
 	"github.com/flexprice/flexprice/internal/domain/environment"
 	"github.com/flexprice/flexprice/internal/domain/events"
 	"github.com/flexprice/flexprice/internal/domain/feature"
@@ -24,6 +28,9 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/secret"
 	"github.com/flexprice/flexprice/internal/domain/subscription"
 	"github.com/flexprice/flexprice/internal/domain/task"
+	taxrate "github.com/flexprice/flexprice/internal/domain/tax"
+	taxapplied "github.com/flexprice/flexprice/internal/domain/taxapplied"
+	taxassociation "github.com/flexprice/flexprice/internal/domain/taxassociation"
 	"github.com/flexprice/flexprice/internal/domain/tenant"
 	"github.com/flexprice/flexprice/internal/domain/user"
 	"github.com/flexprice/flexprice/internal/domain/wallet"
@@ -46,34 +53,42 @@ type ServiceParams struct {
 	S3           s3.Service
 
 	// Repositories
-	AuthRepo                   auth.Repository
-	UserRepo                   user.Repository
-	EventRepo                  events.Repository
-	ProcessedEventRepo         events.ProcessedEventRepository
-	MeterRepo                  meter.Repository
-	PriceRepo                  price.Repository
-	PriceUnitRepo              priceunit.Repository
-	CustomerRepo               customer.Repository
-	PlanRepo                   plan.Repository
-	SubRepo                    subscription.Repository
-	SubscriptionScheduleRepo   subscription.SubscriptionScheduleRepository
-	WalletRepo                 wallet.Repository
-	TenantRepo                 tenant.Repository
-	InvoiceRepo                invoice.Repository
-	FeatureRepo                feature.Repository
-	EntitlementRepo            entitlement.Repository
-	PaymentRepo                payment.Repository
-	SecretRepo                 secret.Repository
-	EnvironmentRepo            environment.Repository
-	TaskRepo                   task.Repository
-	CreditGrantRepo            creditgrant.Repository
-	CostSheetRepo              costsheet.Repository
-	CreditNoteRepo             creditnote.Repository
-	CreditNoteLineItemRepo     creditnote.CreditNoteLineItemRepository
-	CreditGrantApplicationRepo creditgrantapplication.Repository
-	CouponRepo                 coupon.Repository
-	CouponAssociationRepo      coupon_association.Repository
-	CouponApplicationRepo      coupon_application.Repository
+	AuthRepo                     auth.Repository
+	UserRepo                     user.Repository
+	EventRepo                    events.Repository
+	ProcessedEventRepo           events.ProcessedEventRepository
+	MeterRepo                    meter.Repository
+	PriceRepo                    price.Repository
+	PriceUnitRepo                priceunit.Repository
+	CustomerRepo                 customer.Repository
+	PlanRepo                     plan.Repository
+	SubRepo                      subscription.Repository
+	SubscriptionScheduleRepo     subscription.SubscriptionScheduleRepository
+	SubscriptionLineItemRepo     subscription.LineItemRepository
+	WalletRepo                   wallet.Repository
+	TenantRepo                   tenant.Repository
+	InvoiceRepo                  invoice.Repository
+	FeatureRepo                  feature.Repository
+	EntitlementRepo              entitlement.Repository
+	PaymentRepo                  payment.Repository
+	SecretRepo                   secret.Repository
+	EnvironmentRepo              environment.Repository
+	TaskRepo                     task.Repository
+	CreditGrantRepo              creditgrant.Repository
+	CostSheetRepo                costsheet.Repository
+	CreditNoteRepo               creditnote.Repository
+	CreditNoteLineItemRepo       creditnote.CreditNoteLineItemRepository
+	CreditGrantApplicationRepo   creditgrantapplication.Repository
+	TaxRateRepo                  taxrate.Repository
+	TaxAssociationRepo           taxassociation.Repository
+	TaxAppliedRepo               taxapplied.Repository
+	CouponRepo                   coupon.Repository
+	CouponAssociationRepo        coupon_association.Repository
+	CouponApplicationRepo        coupon_application.Repository
+	AddonRepo                    addon.Repository
+	AddonAssociationRepo         addonassociation.Repository
+	ConnectionRepo               connection.Repository
+	EntityIntegrationMappingRepo entityintegrationmapping.Repository
 
 	// Publishers
 	EventPublisher   publisher.EventPublisher
@@ -100,6 +115,7 @@ func NewServiceParams(
 	planRepo plan.Repository,
 	subRepo subscription.Repository,
 	subscriptionScheduleRepo subscription.SubscriptionScheduleRepository,
+	subscriptionLineItemRepo subscription.LineItemRepository,
 	walletRepo wallet.Repository,
 	tenantRepo tenant.Repository,
 	invoiceRepo invoice.Repository,
@@ -112,6 +128,11 @@ func NewServiceParams(
 	creditGrantRepo creditgrant.Repository,
 	creditNoteRepo creditnote.Repository,
 	creditNoteLineItemRepo creditnote.CreditNoteLineItemRepository,
+	taxConfigRepo taxassociation.Repository,
+	taskRepo task.Repository,
+	costSheetRepo costsheet.Repository,
+	taxAppliedRepo taxapplied.Repository,
+	taxRateRepo taxrate.Repository,
 	couponRepo coupon.Repository,
 	couponAssociationRepo coupon_association.Repository,
 	couponApplicationRepo coupon_application.Repository,
@@ -119,45 +140,55 @@ func NewServiceParams(
 	webhookPublisher webhookPublisher.WebhookPublisher,
 	s3Service s3.Service,
 	client httpclient.Client,
-	taskRepo task.Repository,
-	costSheetRepo costsheet.Repository,
+	addonRepo addon.Repository,
+	addonAssociationRepo addonassociation.Repository,
+	connectionRepo connection.Repository,
+	entityIntegrationMappingRepo entityintegrationmapping.Repository,
 ) ServiceParams {
 	return ServiceParams{
-		Logger:                     logger,
-		Config:                     config,
-		DB:                         db,
-		PDFGenerator:               pdfGenerator,
-		AuthRepo:                   authRepo,
-		UserRepo:                   userRepo,
-		EventRepo:                  eventRepo,
-		ProcessedEventRepo:         processedEventRepo,
-		MeterRepo:                  meterRepo,
-		PriceRepo:                  priceRepo,
-		PriceUnitRepo:              priceUnitRepo,
-		CustomerRepo:               customerRepo,
-		PlanRepo:                   planRepo,
-		SubRepo:                    subRepo,
-		SubscriptionScheduleRepo:   subscriptionScheduleRepo,
-		WalletRepo:                 walletRepo,
-		TenantRepo:                 tenantRepo,
-		InvoiceRepo:                invoiceRepo,
-		FeatureRepo:                featureRepo,
-		EntitlementRepo:            entitlementRepo,
-		PaymentRepo:                paymentRepo,
-		SecretRepo:                 secretRepo,
-		EnvironmentRepo:            environmentRepo,
-		CreditGrantRepo:            creditGrantRepo,
-		CreditGrantApplicationRepo: creditGrantApplicationRepo,
-		EventPublisher:             eventPublisher,
-		WebhookPublisher:           webhookPublisher,
-		S3:                         s3Service,
-		Client:                     client,
-		TaskRepo:                   taskRepo,
-		CostSheetRepo:              costSheetRepo,
-		CreditNoteRepo:             creditNoteRepo,
-		CreditNoteLineItemRepo:     creditNoteLineItemRepo,
-		CouponRepo:                 couponRepo,
-		CouponAssociationRepo:      couponAssociationRepo,
-		CouponApplicationRepo:      couponApplicationRepo,
+		Logger:                       logger,
+		Config:                       config,
+		DB:                           db,
+		PDFGenerator:                 pdfGenerator,
+		AuthRepo:                     authRepo,
+		UserRepo:                     userRepo,
+		EventRepo:                    eventRepo,
+		ProcessedEventRepo:           processedEventRepo,
+		MeterRepo:                    meterRepo,
+		PriceRepo:                    priceRepo,
+		PriceUnitRepo:                priceUnitRepo,
+		CustomerRepo:                 customerRepo,
+		PlanRepo:                     planRepo,
+		SubRepo:                      subRepo,
+		SubscriptionScheduleRepo:     subscriptionScheduleRepo,
+		SubscriptionLineItemRepo:     subscriptionLineItemRepo,
+		WalletRepo:                   walletRepo,
+		TenantRepo:                   tenantRepo,
+		InvoiceRepo:                  invoiceRepo,
+		FeatureRepo:                  featureRepo,
+		EntitlementRepo:              entitlementRepo,
+		PaymentRepo:                  paymentRepo,
+		SecretRepo:                   secretRepo,
+		EnvironmentRepo:              environmentRepo,
+		CreditGrantRepo:              creditGrantRepo,
+		CreditGrantApplicationRepo:   creditGrantApplicationRepo,
+		TaskRepo:                     taskRepo,
+		CostSheetRepo:                costSheetRepo,
+		CreditNoteRepo:               creditNoteRepo,
+		CreditNoteLineItemRepo:       creditNoteLineItemRepo,
+		TaxRateRepo:                  taxRateRepo,
+		TaxAssociationRepo:           taxConfigRepo,
+		TaxAppliedRepo:               taxAppliedRepo,
+		EventPublisher:               eventPublisher,
+		WebhookPublisher:             webhookPublisher,
+		S3:                           s3Service,
+		Client:                       client,
+		CouponRepo:                   couponRepo,
+		CouponAssociationRepo:        couponAssociationRepo,
+		CouponApplicationRepo:        couponApplicationRepo,
+		AddonRepo:                    addonRepo,
+		AddonAssociationRepo:         addonAssociationRepo,
+		ConnectionRepo:               connectionRepo,
+		EntityIntegrationMappingRepo: entityIntegrationMappingRepo,
 	}
 }

@@ -172,6 +172,38 @@ func (pu *PaymentUpdate) ClearGatewayPaymentID() *PaymentUpdate {
 	return pu
 }
 
+// SetGatewayTrackingID sets the "gateway_tracking_id" field.
+func (pu *PaymentUpdate) SetGatewayTrackingID(s string) *PaymentUpdate {
+	pu.mutation.SetGatewayTrackingID(s)
+	return pu
+}
+
+// SetNillableGatewayTrackingID sets the "gateway_tracking_id" field if the given value is not nil.
+func (pu *PaymentUpdate) SetNillableGatewayTrackingID(s *string) *PaymentUpdate {
+	if s != nil {
+		pu.SetGatewayTrackingID(*s)
+	}
+	return pu
+}
+
+// ClearGatewayTrackingID clears the value of the "gateway_tracking_id" field.
+func (pu *PaymentUpdate) ClearGatewayTrackingID() *PaymentUpdate {
+	pu.mutation.ClearGatewayTrackingID()
+	return pu
+}
+
+// SetGatewayMetadata sets the "gateway_metadata" field.
+func (pu *PaymentUpdate) SetGatewayMetadata(m map[string]string) *PaymentUpdate {
+	pu.mutation.SetGatewayMetadata(m)
+	return pu
+}
+
+// ClearGatewayMetadata clears the value of the "gateway_metadata" field.
+func (pu *PaymentUpdate) ClearGatewayMetadata() *PaymentUpdate {
+	pu.mutation.ClearGatewayMetadata()
+	return pu
+}
+
 // SetAmount sets the "amount" field.
 func (pu *PaymentUpdate) SetAmount(d decimal.Decimal) *PaymentUpdate {
 	pu.mutation.SetAmount(d)
@@ -485,6 +517,18 @@ func (pu *PaymentUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	if pu.mutation.GatewayPaymentIDCleared() {
 		_spec.ClearField(payment.FieldGatewayPaymentID, field.TypeString)
 	}
+	if value, ok := pu.mutation.GatewayTrackingID(); ok {
+		_spec.SetField(payment.FieldGatewayTrackingID, field.TypeString, value)
+	}
+	if pu.mutation.GatewayTrackingIDCleared() {
+		_spec.ClearField(payment.FieldGatewayTrackingID, field.TypeString)
+	}
+	if value, ok := pu.mutation.GatewayMetadata(); ok {
+		_spec.SetField(payment.FieldGatewayMetadata, field.TypeJSON, value)
+	}
+	if pu.mutation.GatewayMetadataCleared() {
+		_spec.ClearField(payment.FieldGatewayMetadata, field.TypeJSON)
+	}
 	if value, ok := pu.mutation.Amount(); ok {
 		_spec.SetField(payment.FieldAmount, field.TypeOther, value)
 	}
@@ -734,6 +778,38 @@ func (puo *PaymentUpdateOne) SetNillableGatewayPaymentID(s *string) *PaymentUpda
 // ClearGatewayPaymentID clears the value of the "gateway_payment_id" field.
 func (puo *PaymentUpdateOne) ClearGatewayPaymentID() *PaymentUpdateOne {
 	puo.mutation.ClearGatewayPaymentID()
+	return puo
+}
+
+// SetGatewayTrackingID sets the "gateway_tracking_id" field.
+func (puo *PaymentUpdateOne) SetGatewayTrackingID(s string) *PaymentUpdateOne {
+	puo.mutation.SetGatewayTrackingID(s)
+	return puo
+}
+
+// SetNillableGatewayTrackingID sets the "gateway_tracking_id" field if the given value is not nil.
+func (puo *PaymentUpdateOne) SetNillableGatewayTrackingID(s *string) *PaymentUpdateOne {
+	if s != nil {
+		puo.SetGatewayTrackingID(*s)
+	}
+	return puo
+}
+
+// ClearGatewayTrackingID clears the value of the "gateway_tracking_id" field.
+func (puo *PaymentUpdateOne) ClearGatewayTrackingID() *PaymentUpdateOne {
+	puo.mutation.ClearGatewayTrackingID()
+	return puo
+}
+
+// SetGatewayMetadata sets the "gateway_metadata" field.
+func (puo *PaymentUpdateOne) SetGatewayMetadata(m map[string]string) *PaymentUpdateOne {
+	puo.mutation.SetGatewayMetadata(m)
+	return puo
+}
+
+// ClearGatewayMetadata clears the value of the "gateway_metadata" field.
+func (puo *PaymentUpdateOne) ClearGatewayMetadata() *PaymentUpdateOne {
+	puo.mutation.ClearGatewayMetadata()
 	return puo
 }
 
@@ -1079,6 +1155,18 @@ func (puo *PaymentUpdateOne) sqlSave(ctx context.Context) (_node *Payment, err e
 	}
 	if puo.mutation.GatewayPaymentIDCleared() {
 		_spec.ClearField(payment.FieldGatewayPaymentID, field.TypeString)
+	}
+	if value, ok := puo.mutation.GatewayTrackingID(); ok {
+		_spec.SetField(payment.FieldGatewayTrackingID, field.TypeString, value)
+	}
+	if puo.mutation.GatewayTrackingIDCleared() {
+		_spec.ClearField(payment.FieldGatewayTrackingID, field.TypeString)
+	}
+	if value, ok := puo.mutation.GatewayMetadata(); ok {
+		_spec.SetField(payment.FieldGatewayMetadata, field.TypeJSON, value)
+	}
+	if puo.mutation.GatewayMetadataCleared() {
+		_spec.ClearField(payment.FieldGatewayMetadata, field.TypeJSON)
 	}
 	if value, ok := puo.mutation.Amount(); ok {
 		_spec.SetField(payment.FieldAmount, field.TypeOther, value)

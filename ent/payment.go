@@ -47,6 +47,10 @@ type Payment struct {
 	PaymentGateway *string `json:"payment_gateway,omitempty"`
 	// GatewayPaymentID holds the value of the "gateway_payment_id" field.
 	GatewayPaymentID *string `json:"gateway_payment_id,omitempty"`
+	// GatewayTrackingID holds the value of the "gateway_tracking_id" field.
+	GatewayTrackingID *string `json:"gateway_tracking_id,omitempty"`
+	// GatewayMetadata holds the value of the "gateway_metadata" field.
+	GatewayMetadata map[string]string `json:"gateway_metadata,omitempty"`
 	// Amount holds the value of the "amount" field.
 	Amount decimal.Decimal `json:"amount,omitempty"`
 	// Currency holds the value of the "currency" field.
@@ -96,13 +100,13 @@ func (*Payment) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case payment.FieldMetadata:
+		case payment.FieldGatewayMetadata, payment.FieldMetadata:
 			values[i] = new([]byte)
 		case payment.FieldAmount:
 			values[i] = new(decimal.Decimal)
 		case payment.FieldTrackAttempts:
 			values[i] = new(sql.NullBool)
-		case payment.FieldID, payment.FieldTenantID, payment.FieldStatus, payment.FieldCreatedBy, payment.FieldUpdatedBy, payment.FieldEnvironmentID, payment.FieldIdempotencyKey, payment.FieldDestinationType, payment.FieldDestinationID, payment.FieldPaymentMethodType, payment.FieldPaymentMethodID, payment.FieldPaymentGateway, payment.FieldGatewayPaymentID, payment.FieldCurrency, payment.FieldPaymentStatus, payment.FieldErrorMessage:
+		case payment.FieldID, payment.FieldTenantID, payment.FieldStatus, payment.FieldCreatedBy, payment.FieldUpdatedBy, payment.FieldEnvironmentID, payment.FieldIdempotencyKey, payment.FieldDestinationType, payment.FieldDestinationID, payment.FieldPaymentMethodType, payment.FieldPaymentMethodID, payment.FieldPaymentGateway, payment.FieldGatewayPaymentID, payment.FieldGatewayTrackingID, payment.FieldCurrency, payment.FieldPaymentStatus, payment.FieldErrorMessage:
 			values[i] = new(sql.NullString)
 		case payment.FieldCreatedAt, payment.FieldUpdatedAt, payment.FieldSucceededAt, payment.FieldFailedAt, payment.FieldRefundedAt, payment.FieldRecordedAt:
 			values[i] = new(sql.NullTime)
@@ -212,6 +216,21 @@ func (pa *Payment) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				pa.GatewayPaymentID = new(string)
 				*pa.GatewayPaymentID = value.String
+			}
+		case payment.FieldGatewayTrackingID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field gateway_tracking_id", values[i])
+			} else if value.Valid {
+				pa.GatewayTrackingID = new(string)
+				*pa.GatewayTrackingID = value.String
+			}
+		case payment.FieldGatewayMetadata:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field gateway_metadata", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &pa.GatewayMetadata); err != nil {
+					return fmt.Errorf("unmarshal field gateway_metadata: %w", err)
+				}
 			}
 		case payment.FieldAmount:
 			if value, ok := values[i].(*decimal.Decimal); !ok {
@@ -366,6 +385,14 @@ func (pa *Payment) String() string {
 		builder.WriteString("gateway_payment_id=")
 		builder.WriteString(*v)
 	}
+	builder.WriteString(", ")
+	if v := pa.GatewayTrackingID; v != nil {
+		builder.WriteString("gateway_tracking_id=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	builder.WriteString("gateway_metadata=")
+	builder.WriteString(fmt.Sprintf("%v", pa.GatewayMetadata))
 	builder.WriteString(", ")
 	builder.WriteString("amount=")
 	builder.WriteString(fmt.Sprintf("%v", pa.Amount))

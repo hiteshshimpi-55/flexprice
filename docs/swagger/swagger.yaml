@@ -275,6 +275,31 @@ definitions:
     required:
     - subscription_id
     type: object
+  dto.ConnectionResponse:
+    properties:
+      created_at:
+        type: string
+      created_by:
+        type: string
+      encrypted_secret_data:
+        $ref: '#/definitions/types.ConnectionMetadata'
+      environment_id:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      provider_type:
+        $ref: '#/definitions/types.SecretProvider'
+      status:
+        $ref: '#/definitions/types.Status'
+      tenant_id:
+        type: string
+      updated_at:
+        type: string
+      updated_by:
+        type: string
+    type: object
   dto.CostBreakdownItem:
     properties:
       cost:
@@ -469,6 +494,19 @@ definitions:
         type: string
       secret:
         $ref: '#/definitions/dto.SecretResponse'
+    type: object
+  dto.CreateConnectionRequest:
+    properties:
+      encrypted_secret_data:
+        $ref: '#/definitions/types.ConnectionMetadata'
+      name:
+        maxLength: 255
+        type: string
+      provider_type:
+        $ref: '#/definitions/types.SecretProvider'
+    required:
+    - name
+    - provider_type
     type: object
   dto.CreateCostSheetRequest:
     properties:
@@ -677,6 +715,28 @@ definitions:
     required:
     - feature_id
     - feature_type
+    type: object
+  dto.CreateEntityIntegrationMappingRequest:
+    properties:
+      entity_id:
+        maxLength: 255
+        type: string
+      entity_type:
+        $ref: '#/definitions/types.IntegrationEntityType'
+      metadata:
+        additionalProperties: true
+        type: object
+      provider_entity_id:
+        maxLength: 255
+        type: string
+      provider_type:
+        maxLength: 50
+        type: string
+    required:
+    - entity_id
+    - entity_type
+    - provider_entity_id
+    - provider_type
     type: object
   dto.CreateEnvironmentRequest:
     properties:
@@ -926,6 +986,8 @@ definitions:
         type: string
       metadata:
         $ref: '#/definitions/types.Metadata'
+      payment_gateway:
+        $ref: '#/definitions/types.PaymentGatewayType'
       payment_method_id:
         type: string
       payment_method_type:
@@ -1657,6 +1719,48 @@ definitions:
       usage_limit:
         type: integer
     type: object
+  dto.EntityIntegrationMappingResponse:
+    properties:
+      created_at:
+        type: string
+      created_by:
+        type: string
+      entity_id:
+        description: EntityID is the FlexPrice entity ID (e.g., customer_id, plan_id,
+          etc.)
+        type: string
+      entity_type:
+        allOf:
+        - $ref: '#/definitions/types.IntegrationEntityType'
+        description: EntityType is the type of entity (e.g., customer, plan, invoice,
+          subscription, etc.)
+      environment_id:
+        description: EnvironmentID is the environment identifier
+        type: string
+      id:
+        description: ID is the unique identifier for the mapping
+        type: string
+      metadata:
+        additionalProperties: true
+        description: Metadata contains provider-specific data
+        type: object
+      provider_entity_id:
+        description: ProviderEntityID is the provider's entity ID (e.g., stripe_customer_id,
+          etc.)
+        type: string
+      provider_type:
+        description: ProviderType is the payment provider type (e.g., stripe, razorpay,
+          etc.)
+        type: string
+      status:
+        $ref: '#/definitions/types.Status'
+      tenant_id:
+        type: string
+      updated_at:
+        type: string
+      updated_by:
+        type: string
+    type: object
   dto.EnvironmentResponse:
     properties:
       created_at:
@@ -2294,6 +2398,19 @@ definitions:
           type: string
         type: array
     type: object
+  dto.ListConnectionsResponse:
+    properties:
+      connections:
+        items:
+          $ref: '#/definitions/dto.ConnectionResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
   dto.ListCostSheetsResponse:
     properties:
       items:
@@ -2344,6 +2461,15 @@ definitions:
       items:
         items:
           $ref: '#/definitions/dto.EntitlementResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/types.PaginationResponse'
+    type: object
+  dto.ListEntityIntegrationMappingsResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/dto.EntityIntegrationMappingResponse'
         type: array
       pagination:
         $ref: '#/definitions/types.PaginationResponse'
@@ -2587,6 +2713,12 @@ definitions:
         type: string
       failed_at:
         type: string
+      gateway_metadata:
+        $ref: '#/definitions/types.Metadata'
+      gateway_payment_id:
+        type: string
+      gateway_tracking_id:
+        type: string
       id:
         type: string
       idempotency_key:
@@ -2595,13 +2727,19 @@ definitions:
         type: string
       metadata:
         $ref: '#/definitions/types.Metadata'
+      payment_gateway:
+        type: string
       payment_method_id:
         type: string
       payment_method_type:
         $ref: '#/definitions/types.PaymentMethodType'
       payment_status:
         $ref: '#/definitions/types.PaymentStatus'
+      payment_url:
+        type: string
       refunded_at:
+        type: string
+      session_id:
         type: string
       succeeded_at:
         type: string
@@ -3390,6 +3528,12 @@ definitions:
     - idempotency_key
     - transaction_reason
     type: object
+  dto.UpdateConnectionRequest:
+    properties:
+      name:
+        maxLength: 255
+        type: string
+    type: object
   dto.UpdateCostSheetRequest:
     properties:
       id:
@@ -3493,9 +3637,21 @@ definitions:
     type: object
   dto.UpdatePaymentRequest:
     properties:
+      error_message:
+        type: string
+      failed_at:
+        type: string
+      gateway_payment_id:
+        type: string
       metadata:
         $ref: '#/definitions/types.Metadata'
+      payment_gateway:
+        type: string
+      payment_method_id:
+        type: string
       payment_status:
+        type: string
+      succeeded_at:
         type: string
     type: object
   dto.UpdatePaymentStatusRequest:
@@ -4695,6 +4851,28 @@ definitions:
     - NOT_IN
     - BEFORE
     - AFTER
+  types.GenericConnectionMetadata:
+    properties:
+      data:
+        additionalProperties: true
+        type: object
+    type: object
+  types.IntegrationEntityType:
+    enum:
+    - customer
+    - plan
+    - invoice
+    - subscription
+    - payment
+    - credit_note
+    type: string
+    x-enum-varnames:
+    - IntegrationEntityTypeCustomer
+    - IntegrationEntityTypePlan
+    - IntegrationEntityTypeInvoice
+    - IntegrationEntityTypeSubscription
+    - IntegrationEntityTypePayment
+    - IntegrationEntityTypeCreditNote
   types.InvoiceBillingReason:
     enum:
     - SUBSCRIPTION_CREATE
@@ -4861,20 +5039,33 @@ definitions:
     type: string
     x-enum-varnames:
     - PaymentDestinationTypeInvoice
+  types.PaymentGatewayType:
+    enum:
+    - stripe
+    - razorpay
+    - finix
+    type: string
+    x-enum-varnames:
+    - PaymentGatewayTypeStripe
+    - PaymentGatewayTypeRazorpay
+    - PaymentGatewayTypeFinix
   types.PaymentMethodType:
     enum:
     - CARD
     - ACH
     - OFFLINE
     - CREDITS
+    - PAYMENT_LINK
     type: string
     x-enum-varnames:
     - PaymentMethodTypeCard
     - PaymentMethodTypeACH
     - PaymentMethodTypeOffline
     - PaymentMethodTypeCredits
+    - PaymentMethodTypePaymentLink
   types.PaymentStatus:
     enum:
+    - INITIATED
     - PENDING
     - PROCESSING
     - SUCCEEDED
@@ -4883,6 +5074,7 @@ definitions:
     - PARTIALLY_REFUNDED
     type: string
     x-enum-varnames:
+    - PaymentStatusInitiated
     - PaymentStatusPending
     - PaymentStatusProcessing
     - PaymentStatusSucceeded
@@ -5326,6 +5518,254 @@ paths:
       summary: Sign up
       tags:
       - Auth
+  /connections:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of connections
+      parameters:
+      - collectionFormat: csv
+        in: query
+        items:
+          type: string
+        name: connection_ids
+        type: array
+      - in: query
+        name: end_time
+        type: string
+      - in: query
+        name: expand
+        type: string
+      - in: query
+        maximum: 1000
+        minimum: 1
+        name: limit
+        type: integer
+      - in: query
+        minimum: 0
+        name: offset
+        type: integer
+      - enum:
+        - asc
+        - desc
+        in: query
+        name: order
+        type: string
+      - enum:
+        - flexprice
+        - stripe
+        - razorpay
+        in: query
+        name: provider_type
+        type: string
+        x-enum-varnames:
+        - SecretProviderFlexPrice
+        - SecretProviderStripe
+        - SecretProviderRazorpay
+      - in: query
+        name: start_time
+        type: string
+      - enum:
+        - published
+        - deleted
+        - archived
+        in: query
+        name: status
+        type: string
+        x-enum-varnames:
+        - StatusPublished
+        - StatusDeleted
+        - StatusArchived
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ListConnectionsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get connections
+      tags:
+      - Connections
+    post:
+      consumes:
+      - application/json
+      description: Create a new integration connection
+      parameters:
+      - description: Connection
+        in: body
+        name: connection
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateConnectionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.ConnectionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Create a connection
+      tags:
+      - Connections
+  /connections/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a connection by ID
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete a connection
+      tags:
+      - Connections
+    get:
+      consumes:
+      - application/json
+      description: Get a connection by ID
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ConnectionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get a connection
+      tags:
+      - Connections
+    put:
+      consumes:
+      - application/json
+      description: Update a connection by ID
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Connection
+        in: body
+        name: connection
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateConnectionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ConnectionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Update a connection
+      tags:
+      - Connections
+  /connections/search:
+    post:
+      consumes:
+      - application/json
+      description: List connections by filter
+      parameters:
+      - description: Filter
+        in: body
+        name: filter
+        required: true
+        schema:
+          $ref: '#/definitions/types.ConnectionFilter'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ListConnectionsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: List connections by filter
+      tags:
+      - Connections
   /cost:
     get:
       consumes:
@@ -7654,6 +8094,77 @@ paths:
       summary: List features by filter
       tags:
       - Features
+  /integration/providers:
+    get:
+      consumes:
+      - application/json
+      description: Get all available payment providers for the current tenant
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ListConnectionsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get available providers
+      tags:
+      - Integration
+  /integration/sync/{entity_type}/{entity_id}:
+    post:
+      consumes:
+      - application/json
+      description: Sync an entity to all available payment providers for the current
+        tenant
+      parameters:
+      - description: Entity type (e.g., customer, invoice, tax)
+        in: path
+        name: entity_type
+        required: true
+        type: string
+      - description: Entity ID
+        in: path
+        name: entity_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Sync entity to all available providers
+      tags:
+      - Integration
   /invoices:
     get:
       consumes:
@@ -7748,6 +8259,7 @@ paths:
         in: query
         items:
           enum:
+          - INITIATED
           - PENDING
           - PROCESSING
           - SUCCEEDED
@@ -10521,6 +11033,49 @@ paths:
       summary: Get wallet transactions
       tags:
       - Wallets
+  /webhooks/stripe/{tenant_id}/{environment_id}:
+    post:
+      consumes:
+      - application/json
+      description: Process incoming Stripe webhook events for payment status updates
+        and customer creation
+      parameters:
+      - description: Tenant ID
+        in: path
+        name: tenant_id
+        required: true
+        type: string
+      - description: Environment ID
+        in: path
+        name: environment_id
+        required: true
+        type: string
+      - description: Stripe webhook signature
+        in: header
+        name: Stripe-Signature
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Webhook processed successfully
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request - missing parameters or invalid signature
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Handle Stripe webhook events
+      tags:
+      - Webhooks
 schemes:
 - http
 - https

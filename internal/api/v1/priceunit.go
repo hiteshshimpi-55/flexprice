@@ -287,3 +287,37 @@ func (h *PriceUnitHandler) GetByCode(c *gin.Context) {
 
 	c.JSON(http.StatusOK, unit)
 }
+
+// @Summary List price units by filter
+// @Description List price units by filter
+// @Tags Price Units
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param filter body priceunit.PriceUnitFilter true "Filter"
+// @Success 200 {object} dto.ListPriceUnitsResponse
+// @Failure 400 {object} ierr.ErrorResponse
+// @Failure 500 {object} ierr.ErrorResponse
+// @Router /prices/units/search [post]
+func (h *PriceUnitHandler) ListPriceUnitsByFilter(c *gin.Context) {
+	var filter priceunit.PriceUnitFilter
+	if err := c.ShouldBindJSON(&filter); err != nil {
+		c.Error(ierr.WithError(err).
+			WithHint("Invalid filter parameters").
+			Mark(ierr.ErrValidation))
+		return
+	}
+
+	if filter.GetLimit() == 0 {
+		filter.QueryFilter = types.NewDefaultQueryFilter()
+	}
+
+	response, err := h.service.List(c.Request.Context(), &filter)
+	if err != nil {
+		h.log.Error("Failed to list price units by filter", "error", err)
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusOK, response)
+}

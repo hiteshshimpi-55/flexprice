@@ -65,6 +65,8 @@ func (r *paymentRepository) Create(ctx context.Context, p *domainPayment.Payment
 		SetPaymentMethodID(p.PaymentMethodID).
 		SetNillablePaymentGateway(p.PaymentGateway).
 		SetNillableGatewayPaymentID(p.GatewayPaymentID).
+		SetNillableGatewayTrackingID(p.GatewayTrackingID).
+		SetGatewayMetadata(p.GatewayMetadata).
 		SetAmount(p.Amount).
 		SetCurrency(p.Currency).
 		SetPaymentStatus(string(p.PaymentStatus)).
@@ -240,8 +242,11 @@ func (r *paymentRepository) Update(ctx context.Context, p *domainPayment.Payment
 			payment.TenantID(p.TenantID),
 		).
 		SetPaymentStatus(string(p.PaymentStatus)).
+		SetPaymentMethodID(p.PaymentMethodID).
 		SetNillablePaymentGateway(p.PaymentGateway).
 		SetNillableGatewayPaymentID(p.GatewayPaymentID).
+		SetNillableGatewayTrackingID(p.GatewayTrackingID).
+		SetGatewayMetadata(p.GatewayMetadata).
 		SetTrackAttempts(p.TrackAttempts).
 		SetMetadata(p.Metadata).
 		SetUpdatedAt(time.Now().UTC()).

@@ -87,7 +87,7 @@ func (s *billingService) CalculateFixedCharges(
 	fixedCost := decimal.Zero
 	fixedCostLineItems := make([]dto.CreateInvoiceLineItemRequest, 0)
 
-	priceService := NewPriceService(s.PriceRepo, s.MeterRepo, s.PriceUnitRepo, s.Logger)
+	priceService := NewPriceService(s.ServiceParams)
 
 	// Process fixed charges from line items
 	for _, item := range sub.LineItems {
@@ -117,7 +117,8 @@ func (s *billingService) CalculateFixedCharges(
 		}
 
 		fixedCostLineItems = append(fixedCostLineItems, dto.CreateInvoiceLineItemRequest{
-			PlanID:          lo.ToPtr(item.PlanID),
+			EntityID:        lo.ToPtr(item.EntityID),
+			EntityType:      lo.ToPtr(string(item.EntityType)),
 			PlanDisplayName: lo.ToPtr(item.PlanDisplayName),
 			PriceID:         lo.ToPtr(item.PriceID),
 			PriceType:       lo.ToPtr(string(item.PriceType)),
@@ -158,7 +159,7 @@ func (s *billingService) CalculateUsageCharges(
 	planIDs := make([]string, 0)
 	for _, item := range sub.LineItems {
 		if item.PriceType == types.PRICE_TYPE_USAGE {
-			planIDs = append(planIDs, item.PlanID)
+			planIDs = append(planIDs, item.EntityID)
 		}
 	}
 	planIDs = lo.Uniq(planIDs)
@@ -182,7 +183,7 @@ func (s *billingService) CalculateUsageCharges(
 	}
 
 	// Create price service once before processing charges
-	priceService := NewPriceService(s.PriceRepo, s.MeterRepo, s.PriceUnitRepo, s.Logger)
+	priceService := NewPriceService(s.ServiceParams)
 
 	// Process usage charges from line items
 	for _, item := range sub.LineItems {
@@ -209,7 +210,7 @@ func (s *billingService) CalculateUsageCharges(
 		// Process each matching charge individually (normal and overage charges)
 		for _, matchingCharge := range matchingCharges {
 			quantityForCalculation := decimal.NewFromFloat(matchingCharge.Quantity)
-			matchingEntitlement, ok := entitlementsByPlanMeterID[item.PlanID][item.MeterID]
+			matchingEntitlement, ok := entitlementsByPlanMeterID[item.EntityID][item.MeterID]
 
 			// Only apply entitlement adjustments if:
 			// 1. This is not an overage charge
@@ -279,7 +280,8 @@ func (s *billingService) CalculateUsageCharges(
 			}
 
 			usageCharges = append(usageCharges, dto.CreateInvoiceLineItemRequest{
-				PlanID:           lo.ToPtr(item.PlanID),
+				EntityID:         lo.ToPtr(item.EntityID),
+				EntityType:       lo.ToPtr(string(item.EntityType)),
 				PlanDisplayName:  lo.ToPtr(item.PlanDisplayName),
 				PriceType:        lo.ToPtr(string(item.PriceType)),
 				PriceID:          lo.ToPtr(item.PriceID),
@@ -743,26 +745,124 @@ func (s *billingService) CreateInvoiceRequestForCharges(
 			UsageCharges: make([]dto.CreateInvoiceLineItemRequest, 0),
 		}
 	}
+
+	// Apply Coupons if any - both subscription level and line item level
+	couponAssociationService := NewCouponAssociationService(s.ServiceParams)
+	couponValidationService := NewCouponValidationService(s.ServiceParams)
+	couponService := NewCouponService(s.ServiceParams)
+
+	// Get subscription-level coupons
+	couponAssociations, err := couponAssociationService.GetCouponAssociationsBySubscription(ctx, sub.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	validCoupons := make([]dto.InvoiceCoupon, 0)
+	for _, couponAssociation := range couponAssociations {
+		coupon, err := couponService.GetCoupon(ctx, couponAssociation.CouponID)
+		if err != nil {
+			s.Logger.Errorw("failed to get coupon", "error", err, "coupon_id", couponAssociation.CouponID)
+			continue
+		}
+		if err := couponValidationService.ValidateCoupon(ctx, couponAssociation.CouponID, &sub.ID); err != nil {
+			s.Logger.Errorw("failed to validate coupon", "error", err, "coupon_id", couponAssociation.CouponID)
+			continue
+		}
+		validCoupons = append(validCoupons, dto.InvoiceCoupon{
+			CouponID:            couponAssociation.CouponID,
+			CouponAssociationID: &couponAssociation.ID,
+			AmountOff:           coupon.AmountOff,
+			PercentageOff:       coupon.PercentageOff,
+			Type:                coupon.Type,
+		})
+	}
+
+	couponAssociationsbyLineItems, err := couponAssociationService.GetBySubscriptionForLineItems(ctx, sub.ID)
+	// Get line item-level coupons by collecting them from subscription line items
+	if err != nil {
+		return nil, err
+	}
+
+	subLineItemToCouponMap := make(map[string][]*dto.CouponAssociationResponse)
+	for _, couponAssociation := range couponAssociationsbyLineItems {
+		if couponAssociation.SubscriptionLineItemID == nil {
+			continue
+		}
+		subLineItemToCouponMap[*couponAssociation.SubscriptionLineItemID] = append(subLineItemToCouponMap[*couponAssociation.SubscriptionLineItemID], couponAssociation)
+	}
+
+	priceIDtoSubLineItemMap := make(map[string]*subscription.SubscriptionLineItem)
+	for _, lineItem := range sub.LineItems {
+		if lineItem.PriceID == "" {
+			continue
+		}
+		priceIDtoSubLineItemMap[lineItem.PriceID] = lineItem
+	}
+
+	validLineItemCoupons := make([]dto.InvoiceLineItemCoupon, 0)
+	for _, lineItem := range append(result.FixedCharges, result.UsageCharges...) {
+		if lineItem.PriceID == nil {
+			continue
+		}
+		subLineItem, ok := priceIDtoSubLineItemMap[*lineItem.PriceID]
+		if !ok {
+			continue
+		}
+		couponAssociations := subLineItemToCouponMap[subLineItem.ID]
+		for _, couponAssociation := range couponAssociations {
+			coupon, err := couponService.GetCoupon(ctx, couponAssociation.CouponID)
+			if err != nil {
+				s.Logger.Errorw("failed to get coupon", "error", err, "coupon_id", couponAssociation.CouponID)
+				continue
+			}
+			if err := couponValidationService.ValidateCoupon(ctx, couponAssociation.CouponID, &sub.ID); err != nil {
+				s.Logger.Errorw("failed to validate coupon", "error", err, "coupon_id", couponAssociation.CouponID)
+				continue
+			}
+			validLineItemCoupons = append(validLineItemCoupons, dto.InvoiceLineItemCoupon{
+				LineItemID:          *lineItem.PriceID,
+				CouponID:            couponAssociation.CouponID,
+				CouponAssociationID: &couponAssociation.ID,
+				AmountOff:           coupon.AmountOff,
+				PercentageOff:       coupon.PercentageOff,
+				Type:                coupon.Type,
+			})
+		}
+	}
+	// Resolve tax rates for invoice level (invoice-level only per scope)
+	// Prepare minimal request for tax resolution using subscription context
+	taxService := NewTaxService(s.ServiceParams)
+	taxPrepareReq := dto.CreateInvoiceRequest{
+		SubscriptionID: lo.ToPtr(sub.ID),
+		CustomerID:     sub.CustomerID,
+	}
+	preparedTaxRates, err := taxService.PrepareTaxRatesForInvoice(ctx, taxPrepareReq)
+	if err != nil {
+		return nil, err
+	}
 	// Create invoice request
 	req := &dto.CreateInvoiceRequest{
-		CustomerID:     sub.CustomerID,
-		SubscriptionID: lo.ToPtr(sub.ID),
-		InvoiceType:    types.InvoiceTypeSubscription,
-		InvoiceStatus:  lo.ToPtr(types.InvoiceStatusDraft),
-		PaymentStatus:  lo.ToPtr(types.PaymentStatusPending),
-		Currency:       sub.Currency,
-		AmountDue:      result.TotalAmount,
-		Total:          result.TotalAmount,
-		Subtotal:       result.TotalAmount,
-		Description:    description,
-		DueDate:        lo.ToPtr(invoiceDueDate),
-		BillingPeriod:  lo.ToPtr(string(sub.BillingPeriod)),
-		PeriodStart:    &periodStart,
-		PeriodEnd:      &periodEnd,
-		BillingReason:  types.InvoiceBillingReasonSubscriptionCycle,
-		EnvironmentID:  sub.EnvironmentID,
-		Metadata:       metadata,
-		LineItems:      append(result.FixedCharges, result.UsageCharges...),
+		CustomerID:       sub.CustomerID,
+		SubscriptionID:   lo.ToPtr(sub.ID),
+		InvoiceType:      types.InvoiceTypeSubscription,
+		InvoiceStatus:    lo.ToPtr(types.InvoiceStatusDraft),
+		PaymentStatus:    lo.ToPtr(types.PaymentStatusPending),
+		Currency:         sub.Currency,
+		AmountDue:        result.TotalAmount,
+		Total:            result.TotalAmount,
+		Subtotal:         result.TotalAmount,
+		Description:      description,
+		DueDate:          lo.ToPtr(invoiceDueDate),
+		BillingPeriod:    lo.ToPtr(string(sub.BillingPeriod)),
+		PeriodStart:      &periodStart,
+		PeriodEnd:        &periodEnd,
+		BillingReason:    types.InvoiceBillingReasonSubscriptionCycle,
+		EnvironmentID:    sub.EnvironmentID,
+		Metadata:         metadata,
+		LineItems:        append(result.FixedCharges, result.UsageCharges...),
+		InvoiceCoupons:   validCoupons,
+		LineItemCoupons:  validLineItemCoupons,
+		PreparedTaxRates: preparedTaxRates,
 	}
 
 	return req, nil
@@ -898,7 +998,7 @@ func (s *billingService) GetCustomerEntitlements(ctx context.Context, customerID
 		subscriptionMap[sub.ID] = sub
 		for _, li := range sub.LineItems {
 			if li.IsActive(time.Now()) {
-				planIDs = append(planIDs, li.PlanID)
+				planIDs = append(planIDs, li.EntityID)
 			}
 		}
 	}
@@ -950,10 +1050,10 @@ func (s *billingService) GetCustomerEntitlements(ctx context.Context, customerID
 
 	for _, e := range entitlements {
 		featureIDs = append(featureIDs, e.FeatureID)
-		if _, ok := entitlementsByPlan[e.PlanID]; !ok {
-			entitlementsByPlan[e.PlanID] = make([]*entitlement.Entitlement, 0)
+		if _, ok := entitlementsByPlan[e.EntityID]; !ok {
+			entitlementsByPlan[e.EntityID] = make([]*entitlement.Entitlement, 0)
 		}
-		entitlementsByPlan[e.PlanID] = append(entitlementsByPlan[e.PlanID], e)
+		entitlementsByPlan[e.EntityID] = append(entitlementsByPlan[e.EntityID], e)
 	}
 	featureIDs = lo.Uniq(featureIDs)
 
@@ -987,13 +1087,13 @@ func (s *billingService) GetCustomerEntitlements(ctx context.Context, customerID
 			}
 
 			// Get entitlements for this plan
-			planEntitlements, ok := entitlementsByPlan[li.PlanID]
+			planEntitlements, ok := entitlementsByPlan[li.EntityID]
 			if !ok {
 				continue
 			}
 
 			// Get the plan details
-			p, ok := planMap[li.PlanID]
+			p, ok := planMap[li.EntityID]
 			if !ok {
 				continue
 			}
@@ -1016,8 +1116,9 @@ func (s *billingService) GetCustomerEntitlements(ctx context.Context, customerID
 				// Create a source for this entitlement
 				source := &dto.EntitlementSource{
 					SubscriptionID: sub.ID,
-					PlanID:         p.ID,
-					PlanName:       p.Name,
+					EntityID:       p.ID,
+					EntityType:     dto.EntitlementSourceEntityTypePlan,
+					EntitiyName:    p.Name,
 					Quantity:       quantity,
 					EntitlementID:  e.ID,
 					IsEnabled:      e.IsEnabled,

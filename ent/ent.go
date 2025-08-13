@@ -12,8 +12,11 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"github.com/flexprice/flexprice/ent/addon"
+	"github.com/flexprice/flexprice/ent/addonassociation"
 	"github.com/flexprice/flexprice/ent/auth"
 	"github.com/flexprice/flexprice/ent/billingsequence"
+	"github.com/flexprice/flexprice/ent/connection"
 	"github.com/flexprice/flexprice/ent/costsheet"
 	"github.com/flexprice/flexprice/ent/coupon"
 	"github.com/flexprice/flexprice/ent/couponapplication"
@@ -24,6 +27,7 @@ import (
 	"github.com/flexprice/flexprice/ent/creditnotelineitem"
 	"github.com/flexprice/flexprice/ent/customer"
 	"github.com/flexprice/flexprice/ent/entitlement"
+	"github.com/flexprice/flexprice/ent/entityintegrationmapping"
 	"github.com/flexprice/flexprice/ent/environment"
 	"github.com/flexprice/flexprice/ent/feature"
 	"github.com/flexprice/flexprice/ent/invoice"
@@ -42,6 +46,9 @@ import (
 	"github.com/flexprice/flexprice/ent/subscriptionschedule"
 	"github.com/flexprice/flexprice/ent/subscriptionschedulephase"
 	"github.com/flexprice/flexprice/ent/task"
+	"github.com/flexprice/flexprice/ent/taxapplied"
+	"github.com/flexprice/flexprice/ent/taxassociation"
+	"github.com/flexprice/flexprice/ent/taxrate"
 	"github.com/flexprice/flexprice/ent/tenant"
 	"github.com/flexprice/flexprice/ent/user"
 	"github.com/flexprice/flexprice/ent/wallet"
@@ -106,8 +113,11 @@ var (
 func checkColumn(table, column string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
+			addon.Table:                     addon.ValidColumn,
+			addonassociation.Table:          addonassociation.ValidColumn,
 			auth.Table:                      auth.ValidColumn,
 			billingsequence.Table:           billingsequence.ValidColumn,
+			connection.Table:                connection.ValidColumn,
 			costsheet.Table:                 costsheet.ValidColumn,
 			coupon.Table:                    coupon.ValidColumn,
 			couponapplication.Table:         couponapplication.ValidColumn,
@@ -118,6 +128,7 @@ func checkColumn(table, column string) error {
 			creditnotelineitem.Table:        creditnotelineitem.ValidColumn,
 			customer.Table:                  customer.ValidColumn,
 			entitlement.Table:               entitlement.ValidColumn,
+			entityintegrationmapping.Table:  entityintegrationmapping.ValidColumn,
 			environment.Table:               environment.ValidColumn,
 			feature.Table:                   feature.ValidColumn,
 			invoice.Table:                   invoice.ValidColumn,
@@ -136,6 +147,9 @@ func checkColumn(table, column string) error {
 			subscriptionschedule.Table:      subscriptionschedule.ValidColumn,
 			subscriptionschedulephase.Table: subscriptionschedulephase.ValidColumn,
 			task.Table:                      task.ValidColumn,
+			taxapplied.Table:                taxapplied.ValidColumn,
+			taxassociation.Table:            taxassociation.ValidColumn,
+			taxrate.Table:                   taxrate.ValidColumn,
 			tenant.Table:                    tenant.ValidColumn,
 			user.Table:                      user.ValidColumn,
 			wallet.Table:                    wallet.ValidColumn,

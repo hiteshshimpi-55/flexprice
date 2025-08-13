@@ -14,10 +14,16 @@ import (
 // Tx is a transactional client that is created by calling Client.Tx().
 type Tx struct {
 	config
+	// Addon is the client for interacting with the Addon builders.
+	Addon *AddonClient
+	// AddonAssociation is the client for interacting with the AddonAssociation builders.
+	AddonAssociation *AddonAssociationClient
 	// Auth is the client for interacting with the Auth builders.
 	Auth *AuthClient
 	// BillingSequence is the client for interacting with the BillingSequence builders.
 	BillingSequence *BillingSequenceClient
+	// Connection is the client for interacting with the Connection builders.
+	Connection *ConnectionClient
 	// Costsheet is the client for interacting with the Costsheet builders.
 	Costsheet *CostsheetClient
 	// Coupon is the client for interacting with the Coupon builders.
@@ -38,6 +44,8 @@ type Tx struct {
 	Customer *CustomerClient
 	// Entitlement is the client for interacting with the Entitlement builders.
 	Entitlement *EntitlementClient
+	// EntityIntegrationMapping is the client for interacting with the EntityIntegrationMapping builders.
+	EntityIntegrationMapping *EntityIntegrationMappingClient
 	// Environment is the client for interacting with the Environment builders.
 	Environment *EnvironmentClient
 	// Feature is the client for interacting with the Feature builders.
@@ -74,6 +82,12 @@ type Tx struct {
 	SubscriptionSchedulePhase *SubscriptionSchedulePhaseClient
 	// Task is the client for interacting with the Task builders.
 	Task *TaskClient
+	// TaxApplied is the client for interacting with the TaxApplied builders.
+	TaxApplied *TaxAppliedClient
+	// TaxAssociation is the client for interacting with the TaxAssociation builders.
+	TaxAssociation *TaxAssociationClient
+	// TaxRate is the client for interacting with the TaxRate builders.
+	TaxRate *TaxRateClient
 	// Tenant is the client for interacting with the Tenant builders.
 	Tenant *TenantClient
 	// User is the client for interacting with the User builders.
@@ -213,8 +227,11 @@ func (tx *Tx) Client() *Client {
 }
 
 func (tx *Tx) init() {
+	tx.Addon = NewAddonClient(tx.config)
+	tx.AddonAssociation = NewAddonAssociationClient(tx.config)
 	tx.Auth = NewAuthClient(tx.config)
 	tx.BillingSequence = NewBillingSequenceClient(tx.config)
+	tx.Connection = NewConnectionClient(tx.config)
 	tx.Costsheet = NewCostsheetClient(tx.config)
 	tx.Coupon = NewCouponClient(tx.config)
 	tx.CouponApplication = NewCouponApplicationClient(tx.config)
@@ -225,6 +242,7 @@ func (tx *Tx) init() {
 	tx.CreditNoteLineItem = NewCreditNoteLineItemClient(tx.config)
 	tx.Customer = NewCustomerClient(tx.config)
 	tx.Entitlement = NewEntitlementClient(tx.config)
+	tx.EntityIntegrationMapping = NewEntityIntegrationMappingClient(tx.config)
 	tx.Environment = NewEnvironmentClient(tx.config)
 	tx.Feature = NewFeatureClient(tx.config)
 	tx.Invoice = NewInvoiceClient(tx.config)
@@ -243,6 +261,9 @@ func (tx *Tx) init() {
 	tx.SubscriptionSchedule = NewSubscriptionScheduleClient(tx.config)
 	tx.SubscriptionSchedulePhase = NewSubscriptionSchedulePhaseClient(tx.config)
 	tx.Task = NewTaskClient(tx.config)
+	tx.TaxApplied = NewTaxAppliedClient(tx.config)
+	tx.TaxAssociation = NewTaxAssociationClient(tx.config)
+	tx.TaxRate = NewTaxRateClient(tx.config)
 	tx.Tenant = NewTenantClient(tx.config)
 	tx.User = NewUserClient(tx.config)
 	tx.Wallet = NewWalletClient(tx.config)
@@ -256,7 +277,7 @@ func (tx *Tx) init() {
 // of them in order to commit or rollback the transaction.
 //
 // If a closed transaction is embedded in one of the generated entities, and the entity
-// applies a query, for example: Auth.QueryXXX(), the query will be executed
+// applies a query, for example: Addon.QueryXXX(), the query will be executed
 // through the driver which created this transaction.
 //
 // Note that txDriver is not goroutine safe.

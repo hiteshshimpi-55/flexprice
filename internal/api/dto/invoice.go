@@ -12,6 +12,24 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+type InvoiceCoupon struct {
+	CouponID            string           `json:"coupon_id"`
+	CouponAssociationID *string          `json:"coupon_association_id"`
+	AmountOff           *decimal.Decimal `json:"amount_off,omitempty"`
+	PercentageOff       *decimal.Decimal `json:"percentage_off,omitempty"`
+	Type                types.CouponType `json:"type"`
+}
+
+// InvoiceLineItemCoupon represents a coupon applied to a specific invoice line item
+type InvoiceLineItemCoupon struct {
+	LineItemID          string           `json:"line_item_id"` // ID of the invoice line item this coupon applies to
+	CouponID            string           `json:"coupon_id"`
+	CouponAssociationID *string          `json:"coupon_association_id"`
+	AmountOff           *decimal.Decimal `json:"amount_off,omitempty"`
+	PercentageOff       *decimal.Decimal `json:"percentage_off,omitempty"`
+	Type                types.CouponType `json:"type"`
+}
+
 // CreateInvoiceRequest represents the request payload for creating a new invoice
 type CreateInvoiceRequest struct {
 	// invoice_number is an optional human-readable identifier for the invoice
@@ -74,8 +92,24 @@ type CreateInvoiceRequest struct {
 	// coupons
 	Coupons []string `json:"coupons,omitempty"`
 
+	// tax_rates
+	TaxRates []string `json:"tax_rates,omitempty"`
+
+	// Invoice Coupns
+	InvoiceCoupons []InvoiceCoupon `json:"invoice_coupons,omitempty"`
+
+	// Invoice Line Item Coupons
+	LineItemCoupons []InvoiceLineItemCoupon `json:"line_item_coupons,omitempty"`
+
 	// metadata contains additional custom key-value pairs for storing extra information
 	Metadata types.Metadata `json:"metadata,omitempty"`
+
+	// tax_rate_overrides is the tax rate overrides to be applied to the invoice
+	TaxRateOverrides []*TaxRateOverride `json:"tax_rate_overrides,omitempty"`
+
+	// prepared_tax_rates contains the tax rates pre-resolved by the caller (e.g., billing service)
+	// These are applied at invoice level by the invoice service without further resolution
+	PreparedTaxRates []*TaxRateResponse `json:"prepared_tax_rates,omitempty"`
 
 	// environment_id is the unique identifier of the environment this invoice belongs to
 	EnvironmentID string `json:"environment_id,omitempty"`
@@ -149,6 +183,35 @@ func (r *CreateInvoiceRequest) Validate() error {
 		}
 	}
 
+	// Validate invoice coupons if present
+	for _, coupon := range r.InvoiceCoupons {
+		if err := coupon.Validate(); err != nil {
+			return ierr.WithError(err).WithHint("invalid invoice coupon").Mark(ierr.ErrValidation)
+		}
+	}
+
+	// Validate line item coupons if present
+	for _, lineItemCoupon := range r.LineItemCoupons {
+		if err := lineItemCoupon.Validate(); err != nil {
+			return ierr.WithError(err).WithHint("invalid line item coupon").Mark(ierr.ErrValidation)
+		}
+	}
+
+	// taxrate overrides validation
+	if len(r.TaxRateOverrides) > 0 {
+		for _, taxRateOverride := range r.TaxRateOverrides {
+			if err := taxRateOverride.Validate(); err != nil {
+				return ierr.NewError("invalid tax rate override").
+					WithHint("Tax rate override validation failed").
+					WithReportableDetails(map[string]interface{}{
+						"error":             err.Error(),
+						"tax_rate_override": taxRateOverride,
+					}).
+					Mark(ierr.ErrValidation)
+			}
+		}
+	}
+
 	// url validation if url is provided
 	if r.InvoicePDFURL != nil {
 		if err := validator.ValidateURL(r.InvoicePDFURL); err != nil {
@@ -189,9 +252,7 @@ func (r *CreateInvoiceRequest) ToInvoice(ctx context.Context) (*invoice.Invoice,
 		AmountRemaining: decimal.Zero,
 	}
 
-	if r.EnvironmentID != "" {
-		inv.EnvironmentID = r.EnvironmentID
-	} else {
+	if inv.EnvironmentID == "" {
 		inv.EnvironmentID = types.GetEnvironmentID(ctx)
 	}
 
@@ -216,16 +277,202 @@ func (r *CreateInvoiceRequest) ToInvoice(ctx context.Context) (*invoice.Invoice,
 		}
 	}
 
+	// Apply preview-only discounts and taxes (no DB operations)
+	// 1) Line-item level discounts based on temporary line item identifiers (price_id)
+	totalLineItemDiscount := decimal.Zero
+	if len(r.LineItemCoupons) > 0 && len(inv.LineItems) > 0 {
+		for _, lic := range r.LineItemCoupons {
+			for _, li := range inv.LineItems {
+				if li.PriceID != nil && *li.PriceID == lic.LineItemID {
+					discount := lic.CalculateDiscount(li.Amount)
+					if discount.GreaterThan(li.Amount) {
+						discount = li.Amount
+					}
+					totalLineItemDiscount = totalLineItemDiscount.Add(discount)
+					break
+				}
+			}
+		}
+	}
+
+	// 2) Invoice-level discounts applied sequentially after line-item discounts
+	totalInvoiceDiscount := decimal.Zero
+	adjustedAfterLineItem := inv.Subtotal.Sub(totalLineItemDiscount)
+	if adjustedAfterLineItem.IsNegative() {
+		adjustedAfterLineItem = decimal.Zero
+	}
+	runningTotal := adjustedAfterLineItem
+	if len(r.InvoiceCoupons) > 0 {
+		for _, coupon := range r.InvoiceCoupons {
+			discount := coupon.CalculateDiscount(runningTotal)
+			if discount.GreaterThan(runningTotal) {
+				discount = runningTotal
+			}
+			totalInvoiceDiscount = totalInvoiceDiscount.Add(discount)
+			runningTotal = runningTotal.Sub(discount)
+		}
+	}
+
+	totalDiscount := totalLineItemDiscount.Add(totalInvoiceDiscount)
+
+	// 3) Taxes on (subtotal - totalDiscount) using prepared tax rates
+	totalTax := decimal.Zero
+	taxableAmount := inv.Subtotal.Sub(totalDiscount)
+	if taxableAmount.IsNegative() {
+		taxableAmount = decimal.Zero
+	}
+
+	if len(r.PreparedTaxRates) > 0 {
+		for _, tr := range r.PreparedTaxRates {
+			var taxAmount decimal.Decimal
+			switch tr.TaxRateType {
+			case types.TaxRateTypePercentage:
+				if tr.PercentageValue != nil {
+					taxAmount = taxableAmount.Mul(*tr.PercentageValue).Div(decimal.NewFromInt(100))
+				}
+			case types.TaxRateTypeFixed:
+				if tr.FixedValue != nil {
+					taxAmount = *tr.FixedValue
+				}
+			default:
+				continue
+			}
+			if taxAmount.IsNegative() {
+				taxAmount = decimal.Zero
+			}
+			totalTax = totalTax.Add(taxAmount)
+		}
+	}
+
+	// 4) Update invoice preview totals
+	inv.TotalDiscount = totalDiscount
+	inv.TotalTax = totalTax
+	inv.Total = inv.Subtotal.Sub(totalDiscount).Add(totalTax)
+	if inv.Total.IsNegative() {
+		inv.Total = decimal.Zero
+	}
+	inv.AmountDue = inv.Total
+	inv.AmountRemaining = inv.Total.Sub(inv.AmountPaid)
+
 	return inv, nil
+}
+
+func (i *InvoiceCoupon) Validate() error {
+	if i.Type == types.CouponTypePercentage {
+		if i.PercentageOff.IsNegative() {
+			return ierr.NewError("percentage_off must be non-negative").
+				WithHint("percentage_off must be non-negative").
+				Mark(ierr.ErrValidation)
+		}
+	}
+
+	if i.Type == types.CouponTypeFixed {
+		if i.AmountOff.IsNegative() {
+			return ierr.NewError("amount_off must be non-negative").
+				WithHint("amount_off must be non-negative").
+				Mark(ierr.ErrValidation)
+		}
+	}
+
+	return nil
+}
+
+// CalculateDiscount calculates the discount amount for a given price
+func (c *InvoiceCoupon) CalculateDiscount(originalPrice decimal.Decimal) decimal.Decimal {
+	switch c.Type {
+	case types.CouponTypeFixed:
+		return *c.AmountOff
+	case types.CouponTypePercentage:
+		return originalPrice.Mul(*c.PercentageOff).Div(decimal.NewFromInt(100))
+	default:
+		return decimal.Zero
+	}
+}
+
+// ApplyDiscount applies the discount to a given price and returns the final price
+func (c *InvoiceCoupon) ApplyDiscount(originalPrice decimal.Decimal) decimal.Decimal {
+	discount := c.CalculateDiscount(originalPrice)
+	finalPrice := originalPrice.Sub(discount)
+
+	// Ensure final price doesn't go below zero
+	if finalPrice.LessThan(decimal.Zero) {
+		return decimal.Zero
+	}
+
+	return finalPrice
+}
+
+// CalculateDiscount calculates the discount amount for a given price
+func (c *InvoiceLineItemCoupon) CalculateDiscount(originalPrice decimal.Decimal) decimal.Decimal {
+	switch c.Type {
+	case types.CouponTypeFixed:
+		if originalPrice.LessThan(*c.AmountOff) {
+			return originalPrice
+		}
+		return *c.AmountOff
+	case types.CouponTypePercentage:
+		return originalPrice.Mul(*c.PercentageOff).Div(decimal.NewFromInt(100))
+	default:
+		return decimal.Zero
+	}
+}
+
+// ApplyDiscount applies the discount to a given price and returns the final price
+func (c *InvoiceLineItemCoupon) ApplyDiscount(originalPrice decimal.Decimal) decimal.Decimal {
+	discount := c.CalculateDiscount(originalPrice)
+	finalPrice := originalPrice.Sub(discount)
+
+	// Ensure final price doesn't go below zero
+	if finalPrice.LessThan(decimal.Zero) {
+		return decimal.Zero
+	}
+
+	return finalPrice
+}
+
+// Validate validates the line item coupon
+func (c *InvoiceLineItemCoupon) Validate() error {
+	if c.LineItemID == "" {
+		return ierr.NewError("line_item_id is required").
+			WithHint("line_item_id is required for line item coupons").
+			Mark(ierr.ErrValidation)
+	}
+
+	if c.CouponID == "" {
+		return ierr.NewError("coupon_id is required").
+			WithHint("coupon_id is required for line item coupons").
+			Mark(ierr.ErrValidation)
+	}
+
+	if c.Type == types.CouponTypePercentage {
+		if c.PercentageOff == nil || c.PercentageOff.IsNegative() {
+			return ierr.NewError("percentage_off must be non-negative").
+				WithHint("percentage_off must be non-negative").
+				Mark(ierr.ErrValidation)
+		}
+	}
+
+	if c.Type == types.CouponTypeFixed {
+		if c.AmountOff == nil || c.AmountOff.IsNegative() {
+			return ierr.NewError("amount_off must be non-negative").
+				WithHint("amount_off must be non-negative").
+				Mark(ierr.ErrValidation)
+		}
+	}
+
+	return nil
 }
 
 // CreateInvoiceLineItemRequest represents a single line item in an invoice creation request
 type CreateInvoiceLineItemRequest struct {
+	// entity_id is the optional unique identifier of the entity associated with this line item
+	EntityID *string `json:"entity_id,omitempty"`
+
+	// entity_type is the optional type of the entity associated with this line item
+	EntityType *string `json:"entity_type,omitempty"`
+
 	// price_id is the optional unique identifier of the price associated with this line item
 	PriceID *string `json:"price_id,omitempty"`
-
-	// plan_id is the optional unique identifier of the plan associated with this line item
-	PlanID *string `json:"plan_id,omitempty"`
 
 	// plan_display_name is the optional human-readable name of the plan
 	PlanDisplayName *string `json:"plan_display_name,omitempty"`
@@ -262,6 +509,10 @@ type CreateInvoiceLineItemRequest struct {
 
 	// metadata contains additional custom key-value pairs for storing extra information about this line item
 	Metadata types.Metadata `json:"metadata,omitempty"`
+
+	// TODO: !REMOVE after migration
+	// plan_id is the optional unique identifier of the plan associated with this line item
+	PlanID *string `json:"plan_id,omitempty"`
 }
 
 func (r *CreateInvoiceLineItemRequest) Validate(invoiceType types.InvoiceType) error {
@@ -307,7 +558,8 @@ func (r *CreateInvoiceLineItemRequest) ToInvoiceLineItem(ctx context.Context, in
 		CustomerID:       inv.CustomerID,
 		SubscriptionID:   inv.SubscriptionID,
 		PriceID:          r.PriceID,
-		PlanID:           r.PlanID,
+		EntityID:         r.EntityID,
+		EntityType:       r.EntityType,
 		PlanDisplayName:  r.PlanDisplayName,
 		PriceType:        r.PriceType,
 		MeterID:          r.MeterID,
@@ -345,6 +597,12 @@ type InvoiceLineItemResponse struct {
 
 	// plan_id is the optional unique identifier of the plan associated with this line item
 	PlanID *string `json:"plan_id,omitempty"`
+
+	// entity_id is the optional unique identifier of the entity associated with this line item
+	EntityID *string `json:"entity_id,omitempty"`
+
+	// entity_type is the optional type of the entity associated with this line item
+	EntityType *string `json:"entity_type,omitempty"`
 
 	// plan_display_name is the optional human-readable name of the plan
 	PlanDisplayName *string `json:"plan_display_name,omitempty"`
@@ -405,6 +663,9 @@ type InvoiceLineItemResponse struct {
 
 	// updated_by is the identifier of the user who last updated this line item
 	UpdatedBy string `json:"updated_by,omitempty"`
+
+	// usage_analytics contains usage analytics for this line item
+	UsageAnalytics []SourceUsageItem `json:"usage_analytics,omitempty"`
 }
 
 func NewInvoiceLineItemResponse(item *invoice.InvoiceLineItem) *InvoiceLineItemResponse {
@@ -417,7 +678,8 @@ func NewInvoiceLineItemResponse(item *invoice.InvoiceLineItem) *InvoiceLineItemR
 		InvoiceID:        item.InvoiceID,
 		CustomerID:       item.CustomerID,
 		SubscriptionID:   item.SubscriptionID,
-		PlanID:           item.PlanID,
+		EntityID:         item.EntityID,
+		EntityType:       item.EntityType,
 		PlanDisplayName:  item.PlanDisplayName,
 		PriceID:          item.PriceID,
 		PriceType:        item.PriceType,
@@ -610,8 +872,31 @@ type InvoiceResponse struct {
 	// customer contains the customer information associated with this invoice
 	Customer *CustomerResponse `json:"customer,omitempty"`
 
+	// total_tax is the total tax amount for this invoice
+	TotalTax decimal.Decimal `json:"total_tax"`
+
+	// tax_applied_records contains the tax applied records associated with this invoice
+	Taxes []*TaxAppliedResponse `json:"taxes,omitempty"`
 	// coupon_applications contains the coupon applications associated with this invoice
 	CouponApplications []*CouponApplicationResponse `json:"coupon_applications,omitempty"`
+}
+
+// SourceUsageItem represents the usage breakdown for a specific source within a line item
+type SourceUsageItem struct {
+	// source is the name of the event source
+	Source string `json:"source"`
+
+	// cost is the cost attributed to this source for the line item
+	Cost string `json:"cost"`
+
+	// usage is the total usage amount from this source (optional, for additional context)
+	Usage *string `json:"usage,omitempty"`
+
+	// percentage is the percentage of total line item cost from this source (optional)
+	Percentage *string `json:"percentage,omitempty"`
+
+	// event_count is the number of events from this source (optional)
+	EventCount *int `json:"event_count,omitempty"`
 }
 
 // NewInvoiceResponse creates a new invoice response from domain invoice
@@ -630,6 +915,7 @@ func NewInvoiceResponse(inv *invoice.Invoice) *InvoiceResponse {
 		Currency:        inv.Currency,
 		AmountDue:       inv.AmountDue,
 		Total:           inv.Total,
+		TotalTax:        inv.TotalTax,
 		TotalDiscount:   inv.TotalDiscount,
 		Subtotal:        inv.Subtotal,
 		AmountPaid:      inv.AmountPaid,
@@ -687,9 +973,26 @@ func (r *InvoiceResponse) WithCustomer(customer *CustomerResponse) *InvoiceRespo
 	return r
 }
 
+// WithTaxAppliedRecords adds tax applied records to the invoice response
+func (r *InvoiceResponse) WithTaxes(taxes []*TaxAppliedResponse) *InvoiceResponse {
+	r.Taxes = taxes
+	return r
+}
+
 // WithCouponApplications adds coupon applications to the invoice response
 func (r *InvoiceResponse) WithCouponApplications(couponApplications []*CouponApplicationResponse) *InvoiceResponse {
 	r.CouponApplications = couponApplications
+	return r
+}
+
+// WithUsageAnalytics adds usage analytics to the invoice response
+func (r *InvoiceResponse) WithUsageAnalytics(usageAnalytics map[string][]SourceUsageItem) *InvoiceResponse {
+	for _, lineItem := range r.LineItems {
+		usageAnalyticsItem := usageAnalytics[lineItem.ID]
+		if usageAnalyticsItem != nil {
+			lineItem.UsageAnalytics = usageAnalyticsItem
+		}
+	}
 	return r
 }
 

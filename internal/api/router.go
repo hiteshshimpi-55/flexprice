@@ -14,32 +14,37 @@ import (
 )
 
 type Handlers struct {
-	Events            *v1.EventsHandler
-	Meter             *v1.MeterHandler
-	Auth              *v1.AuthHandler
-	User              *v1.UserHandler
-	Environment       *v1.EnvironmentHandler
-	Health            *v1.HealthHandler
-	Price             *v1.PriceHandler
-	Customer          *v1.CustomerHandler
-	Plan              *v1.PlanHandler
-	Subscription      *v1.SubscriptionHandler
-	SubscriptionPause *v1.SubscriptionPauseHandler
-	Wallet            *v1.WalletHandler
-	Tenant            *v1.TenantHandler
-	Invoice           *v1.InvoiceHandler
-	Feature           *v1.FeatureHandler
-	Entitlement       *v1.EntitlementHandler
-	CreditGrant       *v1.CreditGrantHandler
-	Payment           *v1.PaymentHandler
-	Task              *v1.TaskHandler
-	Secret            *v1.SecretHandler
-	CostSheet         *v1.CostSheetHandler
-	CreditNote        *v1.CreditNoteHandler
-	Coupon            *v1.CouponHandler
-	PriceUnit         *v1.PriceUnitHandler
-	Webhook           *v1.WebhookHandler
-	Settings          *v1.SettingsHandler
+	Events                   *v1.EventsHandler
+	Meter                    *v1.MeterHandler
+	Auth                     *v1.AuthHandler
+	User                     *v1.UserHandler
+	Environment              *v1.EnvironmentHandler
+	Health                   *v1.HealthHandler
+	Price                    *v1.PriceHandler
+	Customer                 *v1.CustomerHandler
+	Connection               *v1.ConnectionHandler
+	Plan                     *v1.PlanHandler
+	Subscription             *v1.SubscriptionHandler
+	SubscriptionPause        *v1.SubscriptionPauseHandler
+	Wallet                   *v1.WalletHandler
+	Tenant                   *v1.TenantHandler
+	Invoice                  *v1.InvoiceHandler
+	Feature                  *v1.FeatureHandler
+	Entitlement              *v1.EntitlementHandler
+	CreditGrant              *v1.CreditGrantHandler
+	Payment                  *v1.PaymentHandler
+	Task                     *v1.TaskHandler
+	Secret                   *v1.SecretHandler
+	CostSheet                *v1.CostSheetHandler
+	CreditNote               *v1.CreditNoteHandler
+	Tax                      *v1.TaxHandler
+	Coupon                   *v1.CouponHandler
+	PriceUnit                *v1.PriceUnitHandler
+	Webhook                  *v1.WebhookHandler
+	Addon                    *v1.AddonHandler
+	EntityIntegrationMapping *v1.EntityIntegrationMappingHandler
+	Integration              *v1.IntegrationHandler
+	Settings                 *v1.SettingsHandler
 	// Portal handlers
 	Onboarding *v1.OnboardingHandler
 	// Cron jobs : TODO: move crons out of API based architecture
@@ -129,6 +134,7 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 		price := v1Private.Group("/prices")
 		{
 			price.POST("", handlers.Price.CreatePrice)
+			price.POST("/bulk", handlers.Price.CreateBulkPrice)
 			price.GET("", handlers.Price.GetPrices)
 			price.GET("/:id", handlers.Price.GetPrice)
 			price.PUT("/:id", handlers.Price.UpdatePrice)
@@ -142,6 +148,7 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 				priceUnit.GET("/code/:code", handlers.PriceUnit.GetByCode)
 				priceUnit.PUT("/:id", handlers.PriceUnit.UpdatePriceUnit)
 				priceUnit.DELETE("/:id", handlers.PriceUnit.DeletePriceUnit)
+				priceUnit.POST("/search", handlers.PriceUnit.ListPriceUnitsByFilter)
 			}
 		}
 
@@ -186,6 +193,19 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			plan.GET("/:id/creditgrants", handlers.Plan.GetPlanCreditGrants)
 		}
 
+		addon := v1Private.Group("/addons")
+		{
+			// list addons by filter
+			addon.POST("/search", handlers.Addon.ListAddonsByFilter)
+
+			addon.POST("", handlers.Addon.CreateAddon)
+			addon.GET("", handlers.Addon.GetAddons)
+			addon.GET("/:id", handlers.Addon.GetAddon)
+			addon.GET("/lookup/:lookup_key", handlers.Addon.GetAddonByLookupKey)
+			addon.PUT("/:id", handlers.Addon.UpdateAddon)
+			addon.DELETE("/:id", handlers.Addon.DeleteAddon)
+		}
+
 		subscription := v1Private.Group("/subscriptions")
 		{
 			subscription.POST("/search", handlers.Subscription.ListSubscriptionsByFilter)
@@ -199,6 +219,10 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			subscription.POST("/:id/resume", handlers.SubscriptionPause.ResumeSubscription)
 			subscription.GET("/:id/pauses", handlers.SubscriptionPause.ListPauses)
 			subscription.POST("/:id/phases", handlers.Subscription.AddSubscriptionPhase)
+
+			// Addon management for subscriptions - moved under subscription handler
+			subscription.POST("/addon", handlers.Subscription.AddAddonToSubscription)
+			subscription.DELETE("/addon", handlers.Subscription.RemoveAddonToSubscription)
 		}
 
 		wallet := v1Private.Group("/wallets")
@@ -223,7 +247,7 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 		invoices := v1Private.Group("/invoices")
 		{
 			invoices.POST("/search", handlers.Invoice.ListInvoicesByFilter)
-			invoices.POST("", handlers.Invoice.CreateInvoice)
+			invoices.POST("", handlers.Invoice.CreateOneOffInvoice)
 			invoices.GET("", handlers.Invoice.ListInvoices)
 			invoices.GET("/:id", handlers.Invoice.GetInvoice)
 			invoices.PUT("/:id", handlers.Invoice.UpdateInvoice)
@@ -234,6 +258,7 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			invoices.POST("/:id/payment/attempt", handlers.Invoice.AttemptPayment)
 			invoices.GET("/:id/pdf", handlers.Invoice.GetInvoicePDF)
 			invoices.POST("/:id/recalculate", handlers.Invoice.RecalculateInvoice)
+			invoices.POST("/:id/comms/trigger", handlers.Invoice.TriggerCommunication)
 		}
 
 		feature := v1Private.Group("/features")
@@ -251,6 +276,7 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 		{
 			entitlement.POST("/search", handlers.Entitlement.ListEntitlementsByFilter)
 			entitlement.POST("", handlers.Entitlement.CreateEntitlement)
+			entitlement.POST("/bulk", handlers.Entitlement.CreateBulkEntitlement)
 			entitlement.GET("", handlers.Entitlement.ListEntitlements)
 			entitlement.GET("/:id", handlers.Entitlement.GetEntitlement)
 			entitlement.PUT("/:id", handlers.Entitlement.UpdateEntitlement)
@@ -285,6 +311,26 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			tasks.POST("/:id/process", handlers.Task.ProcessTask)
 		}
 
+		// Tax rate routes
+		tax := v1Private.Group("/taxes")
+		taxRates := tax.Group("/rates")
+		{
+			taxRates.POST("", handlers.Tax.CreateTaxRate)
+			taxRates.GET("", handlers.Tax.ListTaxRates)
+			taxRates.GET("/:id", handlers.Tax.GetTaxRate)
+			taxRates.PUT("/:id", handlers.Tax.UpdateTaxRate)
+			taxRates.DELETE("/:id", handlers.Tax.DeleteTaxRate)
+		}
+
+		taxAssociations := tax.Group("/associations")
+		{
+			taxAssociations.POST("", handlers.Tax.CreateTaxAssociation)
+			taxAssociations.GET("", handlers.Tax.ListTaxAssociations)
+			taxAssociations.GET("/:id", handlers.Tax.GetTaxAssociation)
+			taxAssociations.PUT("/:id", handlers.Tax.UpdateTaxAssociation)
+			taxAssociations.DELETE("/:id", handlers.Tax.DeleteTaxAssociation)
+		}
+
 		// Secret routes
 		secrets := v1Private.Group("/secrets")
 		{
@@ -314,6 +360,16 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			settings.GET("/key/:key", handlers.Settings.GetSettingByKey)
 			settings.PUT("/key/:key", handlers.Settings.UpdateSettingByKey)
 		}
+		// Connection routes
+		connections := v1Private.Group("/connections")
+		{
+			connections.POST("", handlers.Connection.CreateConnection)
+			connections.GET("", handlers.Connection.GetConnections)
+			connections.GET("/:id", handlers.Connection.GetConnection)
+			connections.PUT("/:id", handlers.Connection.UpdateConnection)
+			connections.DELETE("/:id", handlers.Connection.DeleteConnection)
+			connections.POST("/search", handlers.Connection.ListConnectionsByFilter)
+		}
 
 		// Cost sheet routes
 		costSheet := v1Private.Group("/costs")
@@ -336,63 +392,85 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			creditNotes.POST("/:id/finalize", handlers.CreditNote.FinalizeCreditNote)
 		}
 
-		// Coupon routes
-		coupon := v1Private.Group("/coupons")
+		// Entity Integration Mapping routes
+		entityIntegrationMappings := v1Private.Group("/entity-integration-mappings")
 		{
-			coupon.POST("", handlers.Coupon.CreateCoupon)
-			coupon.GET("", handlers.Coupon.ListCouponsByFilter)
-			coupon.GET("/:id", handlers.Coupon.GetCoupon)
-			coupon.PUT("/:id", handlers.Coupon.UpdateCoupon)
-			coupon.DELETE("/:id", handlers.Coupon.DeleteCoupon)
-			coupon.POST("/search", handlers.Coupon.ListCouponsByFilter)
+			entityIntegrationMappings.POST("", handlers.EntityIntegrationMapping.CreateEntityIntegrationMapping)
+			entityIntegrationMappings.GET("", handlers.EntityIntegrationMapping.ListEntityIntegrationMappings)
+			entityIntegrationMappings.GET("/:id", handlers.EntityIntegrationMapping.GetEntityIntegrationMapping)
+			entityIntegrationMappings.DELETE("/:id", handlers.EntityIntegrationMapping.DeleteEntityIntegrationMapping)
 		}
 
-		// Admin routes (API Key only)
-		adminRoutes := v1Private.Group("/admin")
-		adminRoutes.Use(middleware.APIKeyAuthMiddleware(cfg, secretService, logger))
+		// Integration routes
+		integration := v1Private.Group("/integration")
 		{
-			// All admin routes to go here
-		}
-
-		// Portal routes (UI-specific endpoints)
-		portalRoutes := v1Private.Group("/portal")
-		{
-			onboarding := portalRoutes.Group("/onboarding")
+			integration.POST("/sync/:entity_type/:entity_id", handlers.Integration.SyncEntityToProviders)
+			integration.GET("/providers", handlers.Integration.GetAvailableProviders)
+			// Coupon routes
+			coupon := v1Private.Group("/coupons")
 			{
-				onboarding.POST("/events", handlers.Onboarding.GenerateEvents)
-				onboarding.POST("/setup", handlers.Onboarding.SetupDemo)
+				coupon.POST("", handlers.Coupon.CreateCoupon)
+				coupon.GET("", handlers.Coupon.ListCouponsByFilter)
+				coupon.GET("/:id", handlers.Coupon.GetCoupon)
+				coupon.PUT("/:id", handlers.Coupon.UpdateCoupon)
+				coupon.DELETE("/:id", handlers.Coupon.DeleteCoupon)
+				coupon.POST("/search", handlers.Coupon.ListCouponsByFilter)
+			}
+
+			// Admin routes (API Key only)
+			adminRoutes := v1Private.Group("/admin")
+			adminRoutes.Use(middleware.APIKeyAuthMiddleware(cfg, secretService, logger))
+			{
+				// All admin routes to go here
+			}
+
+			// Portal routes (UI-specific endpoints)
+			portalRoutes := v1Private.Group("/portal")
+			{
+				onboarding := portalRoutes.Group("/onboarding")
+				{
+					onboarding.POST("/events", handlers.Onboarding.GenerateEvents)
+					onboarding.POST("/setup", handlers.Onboarding.SetupDemo)
+				}
+			}
+
+			// Webhook routes
+			webhookGroup := v1Private.Group("/webhooks")
+			{
+				webhookGroup.GET("/dashboard", handlers.Webhook.GetDashboardURL)
 			}
 		}
 
-		// Webhook routes
-		webhookGroup := v1Private.Group("/webhooks")
+		// Public webhook endpoints (no authentication required)
+		webhooks := v1Public.Group("/webhooks")
 		{
-			webhookGroup.GET("/dashboard", handlers.Webhook.GetDashboardURL)
+			// Stripe webhook endpoint: POST /v1/webhooks/stripe/{tenant_id}/{environment_id}
+			webhooks.POST("/stripe/:tenant_id/:environment_id", handlers.Webhook.HandleStripeWebhook)
 		}
-	}
 
-	// Cron routes
-	// TODO: move crons out of API based architecture
-	cron := v1Private.Group("/cron")
-	// Subscription related cron jobs
-	subscriptionGroup := cron.Group("/subscriptions")
-	{
-		subscriptionGroup.POST("/update-periods", handlers.CronSubscription.UpdateBillingPeriods)
-		subscriptionGroup.POST("/generate-invoice", handlers.CronSubscription.GenerateInvoice)
-	}
+		// Cron routes
+		// TODO: move crons out of API based architecture
+		cron := v1Private.Group("/cron")
+		// Subscription related cron jobs
+		subscriptionGroup := cron.Group("/subscriptions")
+		{
+			subscriptionGroup.POST("/update-periods", handlers.CronSubscription.UpdateBillingPeriods)
+			subscriptionGroup.POST("/generate-invoice", handlers.CronSubscription.GenerateInvoice)
+		}
 
-	// Wallet related cron jobs
-	walletGroup := cron.Group("/wallets")
-	{
-		walletGroup.POST("/expire-credits", handlers.CronWallet.ExpireCredits)
-		walletGroup.POST("/check-alerts", handlers.CronWallet.CheckAlerts)
-	}
+		// Wallet related cron jobs
+		walletGroup := cron.Group("/wallets")
+		{
+			walletGroup.POST("/expire-credits", handlers.CronWallet.ExpireCredits)
+			walletGroup.POST("/check-alerts", handlers.CronWallet.CheckAlerts)
+		}
 
-	// Credit grant related cron jobs
-	creditGrantGroup := cron.Group("/creditgrants")
-	{
-		creditGrantGroup.POST("/process-scheduled-applications", handlers.CronCreditGrant.ProcessScheduledCreditGrantApplications)
-	}
+		// Credit grant related cron jobs
+		creditGrantGroup := cron.Group("/creditgrants")
+		{
+			creditGrantGroup.POST("/process-scheduled-applications", handlers.CronCreditGrant.ProcessScheduledCreditGrantApplications)
+		}
 
-	return router
+		return router
+	}
 }

@@ -33,8 +33,10 @@ const (
 	FieldSubscriptionID = "subscription_id"
 	// FieldCustomerID holds the string denoting the customer_id field in the database.
 	FieldCustomerID = "customer_id"
-	// FieldPlanID holds the string denoting the plan_id field in the database.
-	FieldPlanID = "plan_id"
+	// FieldEntityID holds the string denoting the entity_id field in the database.
+	FieldEntityID = "entity_id"
+	// FieldEntityType holds the string denoting the entity_type field in the database.
+	FieldEntityType = "entity_type"
 	// FieldPlanDisplayName holds the string denoting the plan_display_name field in the database.
 	FieldPlanDisplayName = "plan_display_name"
 	// FieldPriceID holds the string denoting the price_id field in the database.
@@ -101,7 +103,8 @@ var Columns = []string{
 	FieldEnvironmentID,
 	FieldSubscriptionID,
 	FieldCustomerID,
-	FieldPlanID,
+	FieldEntityID,
+	FieldEntityType,
 	FieldPlanDisplayName,
 	FieldPriceID,
 	FieldPriceType,
@@ -147,6 +150,8 @@ var (
 	SubscriptionIDValidator func(string) error
 	// CustomerIDValidator is a validator for the "customer_id" field. It is called by the builders before save.
 	CustomerIDValidator func(string) error
+	// DefaultEntityType holds the default value on creation for the "entity_type" field.
+	DefaultEntityType string
 	// PriceIDValidator is a validator for the "price_id" field. It is called by the builders before save.
 	PriceIDValidator func(string) error
 	// DefaultQuantity holds the default value on creation for the "quantity" field.
@@ -212,9 +217,14 @@ func ByCustomerID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCustomerID, opts...).ToFunc()
 }
 
-// ByPlanID orders the results by the plan_id field.
-func ByPlanID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldPlanID, opts...).ToFunc()
+// ByEntityID orders the results by the entity_id field.
+func ByEntityID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEntityID, opts...).ToFunc()
+}
+
+// ByEntityType orders the results by the entity_type field.
+func ByEntityType(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEntityType, opts...).ToFunc()
 }
 
 // ByPlanDisplayName orders the results by the plan_display_name field.

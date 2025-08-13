@@ -28,6 +28,10 @@ type Payment struct {
 	PaymentGateway *string `json:"payment_gateway,omitempty"`
 	// The gateway_payment_id is the transaction identifier from the external payment gateway (optional)
 	GatewayPaymentID *string `json:"gateway_payment_id,omitempty"`
+	// The gateway_tracking_id is the tracking identifier from the external payment gateway (optional)
+	GatewayTrackingID *string `json:"gateway_tracking_id,omitempty"`
+	// The gateway_metadata field contains gateway-specific metadata (optional)
+	GatewayMetadata types.Metadata `json:"gateway_metadata,omitempty"`
 	// The amount field specifies the payment value in the given currency
 	Amount decimal.Decimal `json:"amount"`
 	// The currency field uses a three-letter ISO code (USD, EUR, GBP, etc.)
@@ -113,6 +117,13 @@ func (p *Payment) Validate() error {
 				WithHint("Payment method id is invalid").
 				Mark(ierr.ErrValidation)
 		}
+	} else if p.PaymentMethodType == types.PaymentMethodTypePaymentLink {
+		// For payment links, payment method ID should be empty
+		if p.PaymentMethodID != "" {
+			return ierr.NewError("payment method id is not allowed for payment link method type").
+				WithHint("Payment method id is invalid for payment links").
+				Mark(ierr.ErrValidation)
+		}
 	} else if p.PaymentMethodID == "" {
 		return ierr.NewError("invalid payment method id").
 			WithHint("Payment method id is invalid").
@@ -162,6 +173,8 @@ func FromEnt(p *ent.Payment) *Payment {
 		PaymentMethodID:   p.PaymentMethodID,
 		PaymentGateway:    p.PaymentGateway,
 		GatewayPaymentID:  p.GatewayPaymentID,
+		GatewayTrackingID: p.GatewayTrackingID,
+		GatewayMetadata:   p.GatewayMetadata,
 		Amount:            p.Amount,
 		Currency:          p.Currency,
 		PaymentStatus:     types.PaymentStatus(p.PaymentStatus),

@@ -80,3 +80,26 @@ CLAUDE.m
 
 # temp files and script logs
 temp/*
+
+# Additional Go coverage formats
+*.cover
+*.coverprofile
+*.cov
+
+# Go build cache & module download cache
+**/pkg/
+**/bin/
+
+# Logs
+*.log
+
+# IDE/editor junk
+.idea/
+.vscode/
+*.swp
+*~
+
+# OS junk
+Thumbs.db
+
+server

@@ -6,6 +6,7 @@ import (
 	"github.com/flexprice/flexprice/ent"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/types"
+	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
 )
 
@@ -15,7 +16,8 @@ type InvoiceLineItem struct {
 	InvoiceID        string           `json:"invoice_id"`
 	CustomerID       string           `json:"customer_id"`
 	SubscriptionID   *string          `json:"subscription_id,omitempty"`
-	PlanID           *string          `json:"plan_id,omitempty"`
+	EntityID         *string          `json:"entity_id,omitempty"`
+	EntityType       *string          `json:"entity_type,omitempty"`
 	PlanDisplayName  *string          `json:"plan_display_name,omitempty"`
 	PriceID          *string          `json:"price_id,omitempty"`
 	PriceType        *string          `json:"price_type,omitempty"`
@@ -46,7 +48,8 @@ func (i *InvoiceLineItem) FromEnt(e *ent.InvoiceLineItem) *InvoiceLineItem {
 		InvoiceID:        e.InvoiceID,
 		CustomerID:       e.CustomerID,
 		SubscriptionID:   e.SubscriptionID,
-		PlanID:           e.PlanID,
+		EntityID:         e.EntityID,
+		EntityType:       lo.ToPtr(e.EntityType),
 		PlanDisplayName:  e.PlanDisplayName,
 		PriceID:          e.PriceID,
 		PriceType:        e.PriceType,

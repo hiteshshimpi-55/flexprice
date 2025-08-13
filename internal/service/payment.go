@@ -87,6 +87,16 @@ func (s *paymentService) CreatePayment(ctx context.Context, req *dto.CreatePayme
 		p.Metadata["wallet_id"] = selectedWallet.ID
 	}
 
+	// Handle payment link creation
+	if p.PaymentMethodType == types.PaymentMethodTypePaymentLink {
+		// For payment links, we don't create the payment link immediately
+		// The payment link will be created when the payment is processed
+		// Just set the payment gateway information
+		if req.PaymentGateway != nil {
+			p.PaymentGateway = lo.ToPtr(string(*req.PaymentGateway))
+		}
+	}
+
 	// Generate idempotency key
 	if p.IdempotencyKey == "" {
 		p.IdempotencyKey = s.idempGen.GenerateKey(idempotency.ScopePayment, map[string]interface{}{
@@ -252,6 +262,24 @@ func (s *paymentService) UpdatePayment(ctx context.Context, id string, req dto.U
 
 	if req.PaymentStatus != nil {
 		p.PaymentStatus = types.PaymentStatus(*req.PaymentStatus)
+	}
+	if req.PaymentGateway != nil {
+		p.PaymentGateway = req.PaymentGateway
+	}
+	if req.GatewayPaymentID != nil {
+		p.GatewayPaymentID = req.GatewayPaymentID
+	}
+	if req.PaymentMethodID != nil {
+		p.PaymentMethodID = *req.PaymentMethodID
+	}
+	if req.SucceededAt != nil {
+		p.SucceededAt = req.SucceededAt
+	}
+	if req.FailedAt != nil {
+		p.FailedAt = req.FailedAt
+	}
+	if req.ErrorMessage != nil {
+		p.ErrorMessage = req.ErrorMessage
 	}
 	if req.Metadata != nil {
 		p.Metadata = *req.Metadata

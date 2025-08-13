@@ -3,6 +3,7 @@ package dto
 import (
 	"github.com/shopspring/decimal"
 
+	domainPriceUnit "github.com/flexprice/flexprice/internal/domain/priceunit"
 	"github.com/flexprice/flexprice/internal/types"
 )
 
@@ -26,16 +27,7 @@ type UpdatePriceUnitRequest struct {
 
 // PricingUnitResponse represents the response for pricing unit operations
 type PriceUnitResponse struct {
-	ID             string          `json:"id"`
-	Name           string          `json:"name"`
-	Code           string          `json:"code"`
-	Symbol         string          `json:"symbol"`
-	BaseCurrency   string          `json:"base_currency"`
-	ConversionRate decimal.Decimal `json:"conversion_rate"`
-	Precision      int             `json:"precision"`
-	Status         types.Status    `json:"status"`
-	CreatedAt      string          `json:"created_at"`
-	UpdatedAt      string          `json:"updated_at"`
+	*domainPriceUnit.PriceUnit
 }
 
 // ListPricingUnitsResponse represents the paginated response for listing pricing units

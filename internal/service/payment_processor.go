@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/flexprice/flexprice/internal/api/dto"
 	"github.com/flexprice/flexprice/internal/domain/payment"
 	"github.com/flexprice/flexprice/internal/domain/wallet"
 	ierr "github.com/flexprice/flexprice/internal/errors"
@@ -35,15 +36,29 @@ func (p *paymentProcessor) ProcessPayment(ctx context.Context, id string) (*paym
 		return nil, err
 	}
 
-	// If payment is not in pending state, return error
-	if paymentObj.PaymentStatus != types.PaymentStatusPending {
-		return paymentObj, ierr.NewError("payment is not in pending state").
-			WithHint("Invalid payment status for processing payment").
-			WithReportableDetails(map[string]interface{}{
-				"payment_id": paymentObj.ID,
-				"status":     paymentObj.PaymentStatus,
-			}).
-			Mark(ierr.ErrInvalidOperation)
+	// For payment links, accept both INITIATED and PENDING statuses
+	// For other payment methods, only accept PENDING status
+	if paymentObj.PaymentMethodType == types.PaymentMethodTypePaymentLink {
+		if paymentObj.PaymentStatus != types.PaymentStatusInitiated && paymentObj.PaymentStatus != types.PaymentStatusPending {
+			return paymentObj, ierr.NewError("payment is not in initiated or pending state").
+				WithHint("Invalid payment status for processing payment link").
+				WithReportableDetails(map[string]interface{}{
+					"payment_id": paymentObj.ID,
+					"status":     paymentObj.PaymentStatus,
+				}).
+				Mark(ierr.ErrInvalidOperation)
+		}
+	} else {
+		// If payment is not in pending state, return error
+		if paymentObj.PaymentStatus != types.PaymentStatusPending {
+			return paymentObj, ierr.NewError("payment is not in pending state").
+				WithHint("Invalid payment status for processing payment").
+				WithReportableDetails(map[string]interface{}{
+					"payment_id": paymentObj.ID,
+					"status":     paymentObj.PaymentStatus,
+				}).
+				Mark(ierr.ErrInvalidOperation)
+		}
 	}
 
 	// Create a new payment attempt if tracking is enabled
@@ -55,14 +70,26 @@ func (p *paymentProcessor) ProcessPayment(ctx context.Context, id string) (*paym
 		}
 	}
 
-	// Update payment status to processing and fire pending event
-	// TODO: take a lock on the payment object here to avoid race conditions
-	paymentObj.PaymentStatus = types.PaymentStatusProcessing
-	paymentObj.UpdatedAt = time.Now().UTC()
-	if err := p.PaymentRepo.Update(ctx, paymentObj); err != nil {
-		return paymentObj, err
+	// For payment links, if status is INITIATED, we need to create the payment link
+	// If status is already PENDING, we don't need to do anything more
+	if paymentObj.PaymentMethodType == types.PaymentMethodTypePaymentLink && paymentObj.PaymentStatus == types.PaymentStatusInitiated {
+		// Update payment status to processing temporarily
+		paymentObj.PaymentStatus = types.PaymentStatusProcessing
+		paymentObj.UpdatedAt = time.Now().UTC()
+		if err := p.PaymentRepo.Update(ctx, paymentObj); err != nil {
+			return paymentObj, err
+		}
+		p.publishWebhookEvent(ctx, types.WebhookEventPaymentPending, paymentObj.ID)
+	} else if paymentObj.PaymentMethodType != types.PaymentMethodTypePaymentLink {
+		// Update payment status to processing and fire pending event
+		// TODO: take a lock on the payment object here to avoid race conditions
+		paymentObj.PaymentStatus = types.PaymentStatusProcessing
+		paymentObj.UpdatedAt = time.Now().UTC()
+		if err := p.PaymentRepo.Update(ctx, paymentObj); err != nil {
+			return paymentObj, err
+		}
+		p.publishWebhookEvent(ctx, types.WebhookEventPaymentPending, paymentObj.ID)
 	}
-	p.publishWebhookEvent(ctx, types.WebhookEventPaymentPending, paymentObj.ID)
 
 	// Process payment based on payment method type
 	var processErr error
@@ -72,6 +99,14 @@ func (p *paymentProcessor) ProcessPayment(ctx context.Context, id string) (*paym
 		processErr = nil
 	case types.PaymentMethodTypeCredits:
 		processErr = p.handleCreditsPayment(ctx, paymentObj)
+	case types.PaymentMethodTypePaymentLink:
+		// For payment links, create the actual payment link
+		// If status is already PENDING, skip creation
+		if paymentObj.PaymentStatus == types.PaymentStatusPending {
+			processErr = nil // Already processed
+		} else {
+			processErr = p.handlePaymentLinkCreation(ctx, paymentObj)
+		}
 	case types.PaymentMethodTypeCard:
 		// TODO: Implement card payment processing
 		processErr = ierr.NewError("card payment processing not implemented").
@@ -100,10 +135,21 @@ func (p *paymentProcessor) ProcessPayment(ctx context.Context, id string) (*paym
 	// Update attempt status if tracking is enabled
 	if paymentObj.TrackAttempts && attempt != nil {
 		if processErr != nil {
-			attempt.PaymentStatus = types.PaymentStatusFailed
-			attempt.ErrorMessage = lo.ToPtr(processErr.Error())
+			// For payment links, keep attempt as pending even on error
+			if paymentObj.PaymentMethodType == types.PaymentMethodTypePaymentLink {
+				attempt.PaymentStatus = types.PaymentStatusPending
+				attempt.ErrorMessage = lo.ToPtr(processErr.Error())
+			} else {
+				attempt.PaymentStatus = types.PaymentStatusFailed
+				attempt.ErrorMessage = lo.ToPtr(processErr.Error())
+			}
 		} else {
-			attempt.PaymentStatus = types.PaymentStatusSucceeded
+			// For payment links, keep attempt as pending
+			if paymentObj.PaymentMethodType == types.PaymentMethodTypePaymentLink {
+				attempt.PaymentStatus = types.PaymentStatusPending
+			} else {
+				attempt.PaymentStatus = types.PaymentStatusSucceeded
+			}
 		}
 		attempt.UpdatedAt = time.Now().UTC()
 		if err := p.PaymentRepo.UpdateAttempt(ctx, attempt); err != nil {
@@ -113,17 +159,42 @@ func (p *paymentProcessor) ProcessPayment(ctx context.Context, id string) (*paym
 
 	// Update payment status based on processing result
 	if processErr != nil {
-		paymentObj.PaymentStatus = types.PaymentStatusFailed
-		errMsg := processErr.Error()
-		paymentObj.ErrorMessage = lo.ToPtr(errMsg)
-		failedAt := time.Now().UTC()
-		paymentObj.FailedAt = &failedAt
-		p.publishWebhookEvent(ctx, types.WebhookEventPaymentFailed, paymentObj.ID)
+		// For payment links, if the error occurred during payment link creation,
+		// keep the status as INITIATED instead of marking as FAILED
+		if paymentObj.PaymentMethodType == types.PaymentMethodTypePaymentLink {
+			// Keep status as INITIATED when Stripe SDK fails for payment links
+			p.Logger.Infow("keeping payment link as initiated due to Stripe SDK failure",
+				"payment_id", paymentObj.ID,
+				"status", paymentObj.PaymentStatus,
+				"error", processErr.Error())
+			// Reset status back to INITIATED if it was changed to PROCESSING
+			if paymentObj.PaymentStatus == types.PaymentStatusProcessing {
+				paymentObj.PaymentStatus = types.PaymentStatusInitiated
+			}
+			// Don't set failed_at or error_message for payment links
+		} else {
+			// For other cases, mark as failed
+			paymentObj.PaymentStatus = types.PaymentStatusFailed
+			errMsg := processErr.Error()
+			paymentObj.ErrorMessage = lo.ToPtr(errMsg)
+			failedAt := time.Now().UTC()
+			paymentObj.FailedAt = &failedAt
+			p.publishWebhookEvent(ctx, types.WebhookEventPaymentFailed, paymentObj.ID)
+		}
 	} else {
-		paymentObj.PaymentStatus = types.PaymentStatusSucceeded
-		succeededAt := time.Now().UTC()
-		paymentObj.SucceededAt = &succeededAt
-		p.publishWebhookEvent(ctx, types.WebhookEventPaymentSuccess, paymentObj.ID)
+		// For payment links, keep as pending until external payment completion
+		if paymentObj.PaymentMethodType == types.PaymentMethodTypePaymentLink {
+			paymentObj.PaymentStatus = types.PaymentStatusPending
+			paymentObj.SucceededAt = nil // Keep succeeded_at as nil
+			p.Logger.Infow("keeping payment link as pending", "payment_id", paymentObj.ID, "status", paymentObj.PaymentStatus)
+			p.publishWebhookEvent(ctx, types.WebhookEventPaymentPending, paymentObj.ID)
+		} else {
+			paymentObj.PaymentStatus = types.PaymentStatusSucceeded
+			succeededAt := time.Now().UTC()
+			paymentObj.SucceededAt = &succeededAt
+			p.Logger.Infow("marking payment as succeeded", "payment_id", paymentObj.ID, "status", paymentObj.PaymentStatus)
+			p.publishWebhookEvent(ctx, types.WebhookEventPaymentSuccess, paymentObj.ID)
+		}
 	}
 
 	paymentObj.UpdatedAt = time.Now().UTC()
@@ -144,6 +215,93 @@ func (p *paymentProcessor) ProcessPayment(ctx context.Context, id string) (*paym
 	}
 
 	return paymentObj, nil
+}
+
+func (p *paymentProcessor) handlePaymentLinkCreation(ctx context.Context, paymentObj *payment.Payment) error {
+	// Get the invoice to get customer information
+	invoice, err := p.InvoiceRepo.Get(ctx, paymentObj.DestinationID)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to get invoice for payment link creation").
+			WithReportableDetails(map[string]interface{}{
+				"payment_id": paymentObj.ID,
+				"invoice_id": paymentObj.DestinationID,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Create payment link using the specified gateway
+	gatewayService := NewPaymentGatewayService(p.ServiceParams)
+
+	// Extract success and cancel URLs from metadata
+	successURL := ""
+	cancelURL := ""
+	if paymentObj.Metadata != nil {
+		if url, exists := paymentObj.Metadata["success_url"]; exists {
+			successURL = url
+		}
+		if url, exists := paymentObj.Metadata["cancel_url"]; exists {
+			cancelURL = url
+		}
+	}
+
+	// Convert to payment link request
+	paymentLinkReq := &dto.CreatePaymentLinkRequest{
+		InvoiceID:  paymentObj.DestinationID,
+		CustomerID: invoice.CustomerID,
+		Amount:     paymentObj.Amount,
+		Currency:   paymentObj.Currency,
+		SuccessURL: successURL,
+		CancelURL:  cancelURL,
+		Gateway: func() *types.PaymentGatewayType {
+			if paymentObj.PaymentGateway != nil {
+				gatewayType := types.PaymentGatewayType(*paymentObj.PaymentGateway)
+				return &gatewayType
+			}
+			return nil
+		}(),
+		Metadata: paymentObj.Metadata,
+	}
+
+	paymentLinkResp, err := gatewayService.CreatePaymentLink(ctx, paymentLinkReq)
+	if err != nil {
+		// If Stripe SDK fails, keep payment status as INITIATED and return error
+		p.Logger.Errorw("failed to create payment link via Stripe SDK",
+			"error", err,
+			"payment_id", paymentObj.ID,
+			"invoice_id", paymentObj.DestinationID)
+		return err
+	}
+
+	// If Stripe SDK succeeds, update payment status to PENDING
+	paymentObj.PaymentStatus = types.PaymentStatusPending
+
+	// Update payment with gateway information
+	paymentObj.GatewayTrackingID = &paymentLinkResp.ID // Store session_id in gateway_tracking_id
+	paymentObj.GatewayPaymentID = &paymentLinkResp.PaymentIntentID
+	if paymentObj.GatewayMetadata == nil {
+		paymentObj.GatewayMetadata = types.Metadata{}
+	}
+	paymentObj.GatewayMetadata["payment_url"] = paymentLinkResp.PaymentURL
+	paymentObj.GatewayMetadata["gateway"] = paymentLinkResp.Gateway
+	paymentObj.GatewayMetadata["session_id"] = paymentLinkResp.ID
+
+	// Update the payment record
+	if err := p.PaymentRepo.Update(ctx, paymentObj); err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to update payment with payment link information").
+			WithReportableDetails(map[string]interface{}{
+				"payment_id": paymentObj.ID,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+
+	p.Logger.Infow("successfully created payment link and updated status to pending",
+		"payment_id", paymentObj.ID,
+		"session_id", paymentLinkResp.ID,
+		"payment_url", paymentLinkResp.PaymentURL)
+
+	return nil
 }
 
 func (p *paymentProcessor) handleCreditsPayment(ctx context.Context, paymentObj *payment.Payment) error {

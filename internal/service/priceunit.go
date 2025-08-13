@@ -102,11 +102,14 @@ func (s *PriceUnitService) Create(ctx context.Context, req *dto.CreatePriceUnitR
 		BaseCurrency:   strings.ToLower(req.BaseCurrency),
 		ConversionRate: *req.ConversionRate,
 		Precision:      req.Precision,
-		Status:         types.StatusPublished,
-		TenantID:       tenantID,
-		EnvironmentID:  environmentID,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		BaseModel: types.BaseModel{
+			TenantID:  tenantID,
+			Status:    types.StatusPublished,
+			CreatedAt: now,
+			UpdatedAt: now,
+			CreatedBy: types.DefaultUserID,
+			UpdatedBy: types.DefaultUserID,
+		},
 	}
 
 	if err := s.repo.Create(ctx, unit); err != nil {
@@ -356,15 +359,6 @@ func (s *PriceUnitService) ConvertToPriceUnit(ctx context.Context, code, tenantI
 // toResponse converts a domain PricingUnit to a dto.PriceUnitResponse
 func (s *PriceUnitService) toResponse(unit *domainPriceUnit.PriceUnit) *dto.PriceUnitResponse {
 	return &dto.PriceUnitResponse{
-		ID:             unit.ID,
-		Name:           unit.Name,
-		Code:           unit.Code,
-		Symbol:         unit.Symbol,
-		BaseCurrency:   unit.BaseCurrency,
-		ConversionRate: unit.ConversionRate,
-		Precision:      unit.Precision,
-		Status:         unit.Status,
-		CreatedAt:      unit.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:      unit.UpdatedAt.Format(time.RFC3339),
+		PriceUnit: unit,
 	}
 }

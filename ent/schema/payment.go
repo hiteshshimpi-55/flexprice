@@ -70,6 +70,17 @@ func (Payment) Fields() []ent.Field {
 			}).
 			Optional().
 			Nillable(),
+		field.String("gateway_tracking_id").
+			SchemaType(map[string]string{
+				"postgres": "varchar(255)",
+			}).
+			Optional().
+			Nillable(),
+		field.JSON("gateway_metadata", map[string]string{}).
+			Optional().
+			SchemaType(map[string]string{
+				"postgres": "jsonb",
+			}),
 		field.Other("amount", decimal.Decimal{}).
 			SchemaType(map[string]string{
 				"postgres": "numeric(20,8)",

@@ -8,6 +8,7 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/payment"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/types"
+	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
 )
 
@@ -18,6 +19,7 @@ type CreatePaymentRequest struct {
 	DestinationID     string                       `json:"destination_id" binding:"required"`
 	PaymentMethodType types.PaymentMethodType      `json:"payment_method_type" binding:"required"`
 	PaymentMethodID   string                       `json:"payment_method_id"`
+	PaymentGateway    *types.PaymentGatewayType    `json:"payment_gateway,omitempty"`
 	Amount            decimal.Decimal              `json:"amount" binding:"required"`
 	Currency          string                       `json:"currency" binding:"required"`
 	Metadata          types.Metadata               `json:"metadata,omitempty"`
@@ -26,8 +28,14 @@ type CreatePaymentRequest struct {
 
 // UpdatePaymentRequest represents a request to update a payment
 type UpdatePaymentRequest struct {
-	PaymentStatus *string         `json:"payment_status,omitempty"`
-	Metadata      *types.Metadata `json:"metadata,omitempty"`
+	PaymentStatus    *string         `json:"payment_status,omitempty"`
+	PaymentGateway   *string         `json:"payment_gateway,omitempty"`
+	GatewayPaymentID *string         `json:"gateway_payment_id,omitempty"`
+	PaymentMethodID  *string         `json:"payment_method_id,omitempty"`
+	Metadata         *types.Metadata `json:"metadata,omitempty"`
+	SucceededAt      *time.Time      `json:"succeeded_at,omitempty"`
+	FailedAt         *time.Time      `json:"failed_at,omitempty"`
+	ErrorMessage     *string         `json:"error_message,omitempty"`
 }
 
 // PaymentResponse represents a payment response
@@ -42,6 +50,12 @@ type PaymentResponse struct {
 	Currency          string                       `json:"currency"`
 	PaymentStatus     types.PaymentStatus          `json:"payment_status"`
 	TrackAttempts     bool                         `json:"track_attempts"`
+	PaymentGateway    *string                      `json:"payment_gateway,omitempty"`
+	GatewayPaymentID  *string                      `json:"gateway_payment_id,omitempty"`
+	GatewayTrackingID *string                      `json:"gateway_tracking_id,omitempty"`
+	GatewayMetadata   types.Metadata               `json:"gateway_metadata,omitempty"`
+	PaymentURL        *string                      `json:"payment_url,omitempty"`
+	SessionID         *string                      `json:"session_id,omitempty"`
 	Metadata          types.Metadata               `json:"metadata,omitempty"`
 	SucceededAt       *time.Time                   `json:"succeeded_at,omitempty"`
 	FailedAt          *time.Time                   `json:"failed_at,omitempty"`
@@ -89,6 +103,10 @@ func NewPaymentResponse(p *payment.Payment) *PaymentResponse {
 		Currency:          p.Currency,
 		PaymentStatus:     p.PaymentStatus,
 		TrackAttempts:     p.TrackAttempts,
+		PaymentGateway:    p.PaymentGateway,
+		GatewayPaymentID:  p.GatewayPaymentID,
+		GatewayTrackingID: p.GatewayTrackingID,
+		GatewayMetadata:   p.GatewayMetadata,
 		Metadata:          p.Metadata,
 		SucceededAt:       p.SucceededAt,
 		FailedAt:          p.FailedAt,
@@ -99,6 +117,16 @@ func NewPaymentResponse(p *payment.Payment) *PaymentResponse {
 		UpdatedAt:         p.UpdatedAt,
 		CreatedBy:         p.CreatedBy,
 		UpdatedBy:         p.UpdatedBy,
+	}
+
+	// Extract payment URL and session ID from gateway metadata for payment links
+	if p.PaymentMethodType == types.PaymentMethodTypePaymentLink && p.GatewayMetadata != nil {
+		if paymentURL, exists := p.GatewayMetadata["payment_url"]; exists {
+			resp.PaymentURL = &paymentURL
+		}
+		if sessionID, exists := p.GatewayMetadata["session_id"]; exists {
+			resp.SessionID = &sessionID
+		}
 	}
 
 	if p.Attempts != nil {
@@ -151,6 +179,11 @@ func (r *CreatePaymentRequest) ToPayment(ctx context.Context) (*payment.Payment,
 	// Set payment status to pending
 	p.PaymentStatus = types.PaymentStatusPending
 
+	// Handle payment gateway if provided
+	if r.PaymentGateway != nil {
+		p.PaymentGateway = lo.ToPtr(string(*r.PaymentGateway))
+	}
+
 	if r.PaymentMethodType == types.PaymentMethodTypeOffline {
 		p.TrackAttempts = false
 		p.PaymentGateway = nil
@@ -164,7 +197,21 @@ func (r *CreatePaymentRequest) ToPayment(ctx context.Context) (*payment.Payment,
 				}).
 				Mark(ierr.ErrValidation)
 		}
-	} else if r.PaymentMethodType != types.PaymentMethodTypeCredits {
+	} else if r.PaymentMethodType == types.PaymentMethodTypePaymentLink {
+		// For payment links, set initial status as initiated
+		p.PaymentStatus = types.PaymentStatusInitiated
+		p.TrackAttempts = true
+		p.PaymentMethodID = ""   // Set to empty string for payment links
+		p.GatewayPaymentID = nil // Should be nil for payment links initially
+		if p.PaymentGateway == nil {
+			return nil, ierr.NewError("payment gateway is required for payment link method type").
+				WithHint("Payment gateway must be specified for payment link method type").
+				WithReportableDetails(map[string]interface{}{
+					"payment_method_type": r.PaymentMethodType,
+				}).
+				Mark(ierr.ErrValidation)
+		}
+	} else if r.PaymentMethodType != types.PaymentMethodTypeCredits && r.PaymentMethodType != types.PaymentMethodTypePaymentLink {
 		if p.PaymentMethodID == "" {
 			return nil, ierr.NewError("payment method id is required for online payment method type").
 				WithHint("Payment method ID is required for online payment methods").

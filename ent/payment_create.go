@@ -178,6 +178,26 @@ func (pc *PaymentCreate) SetNillableGatewayPaymentID(s *string) *PaymentCreate {
 	return pc
 }
 
+// SetGatewayTrackingID sets the "gateway_tracking_id" field.
+func (pc *PaymentCreate) SetGatewayTrackingID(s string) *PaymentCreate {
+	pc.mutation.SetGatewayTrackingID(s)
+	return pc
+}
+
+// SetNillableGatewayTrackingID sets the "gateway_tracking_id" field if the given value is not nil.
+func (pc *PaymentCreate) SetNillableGatewayTrackingID(s *string) *PaymentCreate {
+	if s != nil {
+		pc.SetGatewayTrackingID(*s)
+	}
+	return pc
+}
+
+// SetGatewayMetadata sets the "gateway_metadata" field.
+func (pc *PaymentCreate) SetGatewayMetadata(m map[string]string) *PaymentCreate {
+	pc.mutation.SetGatewayMetadata(m)
+	return pc
+}
+
 // SetAmount sets the "amount" field.
 func (pc *PaymentCreate) SetAmount(d decimal.Decimal) *PaymentCreate {
 	pc.mutation.SetAmount(d)
@@ -534,6 +554,14 @@ func (pc *PaymentCreate) createSpec() (*Payment, *sqlgraph.CreateSpec) {
 	if value, ok := pc.mutation.GatewayPaymentID(); ok {
 		_spec.SetField(payment.FieldGatewayPaymentID, field.TypeString, value)
 		_node.GatewayPaymentID = &value
+	}
+	if value, ok := pc.mutation.GatewayTrackingID(); ok {
+		_spec.SetField(payment.FieldGatewayTrackingID, field.TypeString, value)
+		_node.GatewayTrackingID = &value
+	}
+	if value, ok := pc.mutation.GatewayMetadata(); ok {
+		_spec.SetField(payment.FieldGatewayMetadata, field.TypeJSON, value)
+		_node.GatewayMetadata = value
 	}
 	if value, ok := pc.mutation.Amount(); ok {
 		_spec.SetField(payment.FieldAmount, field.TypeOther, value)

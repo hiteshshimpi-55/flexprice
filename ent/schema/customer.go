@@ -97,5 +97,9 @@ func (Customer) Indexes() []ent.Index {
 			Annotations(entsql.IndexWhere("(external_id IS NOT NULL AND external_id != '') AND status = 'published'")).
 			StorageKey(Idx_tenant_environment_external_id_unique),
 		index.Fields("tenant_id", "environment_id"),
+		// Add email index for efficient email-based lookups
+		index.Fields("tenant_id", "environment_id", "email").
+			Annotations(entsql.IndexWhere("email IS NOT NULL AND email != '' AND status = 'published'")).
+			StorageKey("idx_customer_tenant_environment_email"),
 	}
 }

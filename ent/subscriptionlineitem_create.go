@@ -125,16 +125,30 @@ func (slic *SubscriptionLineItemCreate) SetCustomerID(s string) *SubscriptionLin
 	return slic
 }
 
-// SetPlanID sets the "plan_id" field.
-func (slic *SubscriptionLineItemCreate) SetPlanID(s string) *SubscriptionLineItemCreate {
-	slic.mutation.SetPlanID(s)
+// SetEntityID sets the "entity_id" field.
+func (slic *SubscriptionLineItemCreate) SetEntityID(s string) *SubscriptionLineItemCreate {
+	slic.mutation.SetEntityID(s)
 	return slic
 }
 
-// SetNillablePlanID sets the "plan_id" field if the given value is not nil.
-func (slic *SubscriptionLineItemCreate) SetNillablePlanID(s *string) *SubscriptionLineItemCreate {
+// SetNillableEntityID sets the "entity_id" field if the given value is not nil.
+func (slic *SubscriptionLineItemCreate) SetNillableEntityID(s *string) *SubscriptionLineItemCreate {
 	if s != nil {
-		slic.SetPlanID(*s)
+		slic.SetEntityID(*s)
+	}
+	return slic
+}
+
+// SetEntityType sets the "entity_type" field.
+func (slic *SubscriptionLineItemCreate) SetEntityType(s string) *SubscriptionLineItemCreate {
+	slic.mutation.SetEntityType(s)
+	return slic
+}
+
+// SetNillableEntityType sets the "entity_type" field if the given value is not nil.
+func (slic *SubscriptionLineItemCreate) SetNillableEntityType(s *string) *SubscriptionLineItemCreate {
+	if s != nil {
+		slic.SetEntityType(*s)
 	}
 	return slic
 }
@@ -408,6 +422,10 @@ func (slic *SubscriptionLineItemCreate) defaults() {
 		v := subscriptionlineitem.DefaultEnvironmentID
 		slic.mutation.SetEnvironmentID(v)
 	}
+	if _, ok := slic.mutation.EntityType(); !ok {
+		v := subscriptionlineitem.DefaultEntityType
+		slic.mutation.SetEntityType(v)
+	}
 	if _, ok := slic.mutation.Quantity(); !ok {
 		v := subscriptionlineitem.DefaultQuantity
 		slic.mutation.SetQuantity(v)
@@ -452,6 +470,9 @@ func (slic *SubscriptionLineItemCreate) check() error {
 		if err := subscriptionlineitem.CustomerIDValidator(v); err != nil {
 			return &ValidationError{Name: "customer_id", err: fmt.Errorf(`ent: validator failed for field "SubscriptionLineItem.customer_id": %w`, err)}
 		}
+	}
+	if _, ok := slic.mutation.EntityType(); !ok {
+		return &ValidationError{Name: "entity_type", err: errors.New(`ent: missing required field "SubscriptionLineItem.entity_type"`)}
 	}
 	if _, ok := slic.mutation.PriceID(); !ok {
 		return &ValidationError{Name: "price_id", err: errors.New(`ent: missing required field "SubscriptionLineItem.price_id"`)}
@@ -553,9 +574,13 @@ func (slic *SubscriptionLineItemCreate) createSpec() (*SubscriptionLineItem, *sq
 		_spec.SetField(subscriptionlineitem.FieldCustomerID, field.TypeString, value)
 		_node.CustomerID = value
 	}
-	if value, ok := slic.mutation.PlanID(); ok {
-		_spec.SetField(subscriptionlineitem.FieldPlanID, field.TypeString, value)
-		_node.PlanID = &value
+	if value, ok := slic.mutation.EntityID(); ok {
+		_spec.SetField(subscriptionlineitem.FieldEntityID, field.TypeString, value)
+		_node.EntityID = &value
+	}
+	if value, ok := slic.mutation.EntityType(); ok {
+		_spec.SetField(subscriptionlineitem.FieldEntityType, field.TypeString, value)
+		_node.EntityType = value
 	}
 	if value, ok := slic.mutation.PlanDisplayName(); ok {
 		_spec.SetField(subscriptionlineitem.FieldPlanDisplayName, field.TypeString, value)

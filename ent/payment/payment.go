@@ -43,6 +43,10 @@ const (
 	FieldPaymentGateway = "payment_gateway"
 	// FieldGatewayPaymentID holds the string denoting the gateway_payment_id field in the database.
 	FieldGatewayPaymentID = "gateway_payment_id"
+	// FieldGatewayTrackingID holds the string denoting the gateway_tracking_id field in the database.
+	FieldGatewayTrackingID = "gateway_tracking_id"
+	// FieldGatewayMetadata holds the string denoting the gateway_metadata field in the database.
+	FieldGatewayMetadata = "gateway_metadata"
 	// FieldAmount holds the string denoting the amount field in the database.
 	FieldAmount = "amount"
 	// FieldCurrency holds the string denoting the currency field in the database.
@@ -93,6 +97,8 @@ var Columns = []string{
 	FieldPaymentMethodID,
 	FieldPaymentGateway,
 	FieldGatewayPaymentID,
+	FieldGatewayTrackingID,
+	FieldGatewayMetadata,
 	FieldAmount,
 	FieldCurrency,
 	FieldPaymentStatus,
@@ -220,6 +226,11 @@ func ByPaymentGateway(opts ...sql.OrderTermOption) OrderOption {
 // ByGatewayPaymentID orders the results by the gateway_payment_id field.
 func ByGatewayPaymentID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldGatewayPaymentID, opts...).ToFunc()
+}
+
+// ByGatewayTrackingID orders the results by the gateway_tracking_id field.
+func ByGatewayTrackingID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldGatewayTrackingID, opts...).ToFunc()
 }
 
 // ByAmount orders the results by the amount field.

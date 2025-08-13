@@ -82,3 +82,8 @@ const (
 	WebhookEventWalletCreditBalanceDropped  = "wallet.credit_balance.dropped"
 	WebhookEventWalletOngoingBalanceDropped = "wallet.ongoing_balance.dropped"
 )
+
+// communication event names
+const (
+	WebhookEventInvoiceCommunicationTriggered = "invoice.communication.triggered"
+)

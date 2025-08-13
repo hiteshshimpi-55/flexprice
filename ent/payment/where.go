@@ -136,6 +136,11 @@ func GatewayPaymentID(v string) predicate.Payment {
 	return predicate.Payment(sql.FieldEQ(FieldGatewayPaymentID, v))
 }
 
+// GatewayTrackingID applies equality check predicate on the "gateway_tracking_id" field. It's identical to GatewayTrackingIDEQ.
+func GatewayTrackingID(v string) predicate.Payment {
+	return predicate.Payment(sql.FieldEQ(FieldGatewayTrackingID, v))
+}
+
 // Amount applies equality check predicate on the "amount" field. It's identical to AmountEQ.
 func Amount(v decimal.Decimal) predicate.Payment {
 	return predicate.Payment(sql.FieldEQ(FieldAmount, v))
@@ -1099,6 +1104,91 @@ func GatewayPaymentIDEqualFold(v string) predicate.Payment {
 // GatewayPaymentIDContainsFold applies the ContainsFold predicate on the "gateway_payment_id" field.
 func GatewayPaymentIDContainsFold(v string) predicate.Payment {
 	return predicate.Payment(sql.FieldContainsFold(FieldGatewayPaymentID, v))
+}
+
+// GatewayTrackingIDEQ applies the EQ predicate on the "gateway_tracking_id" field.
+func GatewayTrackingIDEQ(v string) predicate.Payment {
+	return predicate.Payment(sql.FieldEQ(FieldGatewayTrackingID, v))
+}
+
+// GatewayTrackingIDNEQ applies the NEQ predicate on the "gateway_tracking_id" field.
+func GatewayTrackingIDNEQ(v string) predicate.Payment {
+	return predicate.Payment(sql.FieldNEQ(FieldGatewayTrackingID, v))
+}
+
+// GatewayTrackingIDIn applies the In predicate on the "gateway_tracking_id" field.
+func GatewayTrackingIDIn(vs ...string) predicate.Payment {
+	return predicate.Payment(sql.FieldIn(FieldGatewayTrackingID, vs...))
+}
+
+// GatewayTrackingIDNotIn applies the NotIn predicate on the "gateway_tracking_id" field.
+func GatewayTrackingIDNotIn(vs ...string) predicate.Payment {
+	return predicate.Payment(sql.FieldNotIn(FieldGatewayTrackingID, vs...))
+}
+
+// GatewayTrackingIDGT applies the GT predicate on the "gateway_tracking_id" field.
+func GatewayTrackingIDGT(v string) predicate.Payment {
+	return predicate.Payment(sql.FieldGT(FieldGatewayTrackingID, v))
+}
+
+// GatewayTrackingIDGTE applies the GTE predicate on the "gateway_tracking_id" field.
+func GatewayTrackingIDGTE(v string) predicate.Payment {
+	return predicate.Payment(sql.FieldGTE(FieldGatewayTrackingID, v))
+}
+
+// GatewayTrackingIDLT applies the LT predicate on the "gateway_tracking_id" field.
+func GatewayTrackingIDLT(v string) predicate.Payment {
+	return predicate.Payment(sql.FieldLT(FieldGatewayTrackingID, v))
+}
+
+// GatewayTrackingIDLTE applies the LTE predicate on the "gateway_tracking_id" field.
+func GatewayTrackingIDLTE(v string) predicate.Payment {
+	return predicate.Payment(sql.FieldLTE(FieldGatewayTrackingID, v))
+}
+
+// GatewayTrackingIDContains applies the Contains predicate on the "gateway_tracking_id" field.
+func GatewayTrackingIDContains(v string) predicate.Payment {
+	return predicate.Payment(sql.FieldContains(FieldGatewayTrackingID, v))
+}
+
+// GatewayTrackingIDHasPrefix applies the HasPrefix predicate on the "gateway_tracking_id" field.
+func GatewayTrackingIDHasPrefix(v string) predicate.Payment {
+	return predicate.Payment(sql.FieldHasPrefix(FieldGatewayTrackingID, v))
+}
+
+// GatewayTrackingIDHasSuffix applies the HasSuffix predicate on the "gateway_tracking_id" field.
+func GatewayTrackingIDHasSuffix(v string) predicate.Payment {
+	return predicate.Payment(sql.FieldHasSuffix(FieldGatewayTrackingID, v))
+}
+
+// GatewayTrackingIDIsNil applies the IsNil predicate on the "gateway_tracking_id" field.
+func GatewayTrackingIDIsNil() predicate.Payment {
+	return predicate.Payment(sql.FieldIsNull(FieldGatewayTrackingID))
+}
+
+// GatewayTrackingIDNotNil applies the NotNil predicate on the "gateway_tracking_id" field.
+func GatewayTrackingIDNotNil() predicate.Payment {
+	return predicate.Payment(sql.FieldNotNull(FieldGatewayTrackingID))
+}
+
+// GatewayTrackingIDEqualFold applies the EqualFold predicate on the "gateway_tracking_id" field.
+func GatewayTrackingIDEqualFold(v string) predicate.Payment {
+	return predicate.Payment(sql.FieldEqualFold(FieldGatewayTrackingID, v))
+}
+
+// GatewayTrackingIDContainsFold applies the ContainsFold predicate on the "gateway_tracking_id" field.
+func GatewayTrackingIDContainsFold(v string) predicate.Payment {
+	return predicate.Payment(sql.FieldContainsFold(FieldGatewayTrackingID, v))
+}
+
+// GatewayMetadataIsNil applies the IsNil predicate on the "gateway_metadata" field.
+func GatewayMetadataIsNil() predicate.Payment {
+	return predicate.Payment(sql.FieldIsNull(FieldGatewayMetadata))
+}
+
+// GatewayMetadataNotNil applies the NotNil predicate on the "gateway_metadata" field.
+func GatewayMetadataNotNil() predicate.Payment {
+	return predicate.Payment(sql.FieldNotNull(FieldGatewayMetadata))
 }
 
 // AmountEQ applies the EQ predicate on the "amount" field.

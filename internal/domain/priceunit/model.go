@@ -1,8 +1,6 @@
 package priceunit
 
 import (
-	"time"
-
 	"github.com/flexprice/flexprice/ent"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/types"
@@ -11,46 +9,15 @@ import (
 
 // PriceUnit represents a unit of pricing in the domain
 type PriceUnit struct {
-	ID             string
-	Name           string
-	Code           string
-	Symbol         string
-	BaseCurrency   string
-	ConversionRate decimal.Decimal
-	Precision      int
-	Status         types.Status
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	TenantID       string
-	EnvironmentID  string
-}
-
-// NewPriceUnit creates a new pricing unit with validation
-func NewPriceUnit(
-	name, code, symbol, baseCurrency string,
-	conversionRate decimal.Decimal,
-	precision int,
-	tenantID, environmentID string,
-) (*PriceUnit, error) {
-	unit := &PriceUnit{
-		Name:           name,
-		Code:           code,
-		Symbol:         symbol,
-		BaseCurrency:   baseCurrency,
-		ConversionRate: conversionRate,
-		Precision:      precision,
-		Status:         types.StatusPublished,
-		TenantID:       tenantID,
-		EnvironmentID:  environmentID,
-		CreatedAt:      time.Now(),
-		UpdatedAt:      time.Now(),
-	}
-
-	if err := unit.Validate(); err != nil {
-		return nil, err
-	}
-
-	return unit, nil
+	ID             string          `json:"id"`
+	Name           string          `json:"name"`
+	Code           string          `json:"code"`
+	Symbol         string          `json:"symbol"`
+	BaseCurrency   string          `json:"base_currency"`
+	ConversionRate decimal.Decimal `json:"conversion_rate"`
+	Precision      int             `json:"precision"`
+	EnvironmentID  string          `json:"environment_id"`
+	types.BaseModel
 }
 
 // Validate validates the price unit
@@ -138,11 +105,14 @@ func FromEnt(e *ent.PriceUnit) *PriceUnit {
 		BaseCurrency:   e.BaseCurrency,
 		ConversionRate: e.ConversionRate,
 		Precision:      e.Precision,
-		Status:         types.Status(e.Status),
-		CreatedAt:      e.CreatedAt,
-		UpdatedAt:      e.UpdatedAt,
-		TenantID:       e.TenantID,
-		EnvironmentID:  e.EnvironmentID,
+		BaseModel: types.BaseModel{
+			TenantID:  e.TenantID,
+			Status:    types.Status(e.Status),
+			CreatedAt: e.CreatedAt,
+			UpdatedAt: e.UpdatedAt,
+			CreatedBy: e.CreatedBy,
+			UpdatedBy: e.UpdatedBy,
+		},
 	}
 }
 
@@ -165,6 +135,12 @@ type PriceUnitFilter struct {
 
 	// TimeRangeFilter allows filtering by time periods
 	TimeRangeFilter *types.TimeRangeFilter
+
+	// Filters allows complex filtering based on multiple fields
+	Filters []*types.FilterCondition `json:"filters,omitempty" form:"filters" validate:"omitempty"`
+
+	// Sort allows sorting by multiple fields
+	Sort []*types.SortCondition `json:"sort,omitempty" form:"sort" validate:"omitempty"`
 
 	// Status filters by price unit status
 	Status types.Status `json:"status,omitempty" form:"status"`
