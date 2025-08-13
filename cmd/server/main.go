@@ -152,13 +152,10 @@ func main() {
 			repository.NewCouponAssociationRepository,
 			repository.NewCouponApplicationRepository,
 			repository.NewPriceUnitRepository,
-<<<<<<< HEAD
-			repository.NewSettingsRepository,
-=======
 			repository.NewAddonRepository,
 			repository.NewAddonAssociationRepository,
 			repository.NewSubscriptionLineItemRepository,
->>>>>>> develop
+			repository.NewSettingsRepository,
 
 			// PubSub
 			pubsubRouter.NewRouter,
@@ -209,11 +206,8 @@ func main() {
 			service.NewTaxService,
 			service.NewCouponService,
 			service.NewPriceUnitService,
-<<<<<<< HEAD
-			service.NewSettingsService,
-=======
 			service.NewAddonService,
->>>>>>> develop
+			service.NewSettingsService,
 		),
 	)
 
