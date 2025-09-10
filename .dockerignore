@@ -1,0 +1,169 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+# docs/  # Commented out - needed for swagger imports
+README.md
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+SECURITY.md
+SETUP.md
+LICENSE
+
+# Development files
+.env
+.env.local
+.env.*.local
+*.log
+*.tmp
+*.temp
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Node.js (if any)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.pytest_cache/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.out
+coverage.html
+*.prof
+
+# Build artifacts
+dist/
+build/
+bin/
+server
+app
+
+# Test files
+*_test.go
+test/
+tests/
+*_test.py
+test_*.py
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+azure-pipelines.yml
+
+# Docker
+Dockerfile.local
+docker-compose.yml
+docker-compose.*.yml
+.dockerignore
+
+# API and SDK generation
+api/
+openapitools.json
+
+# Scripts (unless needed at runtime)
+scripts/
+*.sh
+
+# Assets that aren't needed for runtime
+assets/complex-iterations.png
+assets/features.jpg
+assets/flexprice_logo_old.svg
+assets/open-arch-old.png
+assets/open-arch.jpg
+assets/struggle.png
+
+# Database and migration files (if not needed at runtime)
+migrations/
+*.sql
+
+# Configuration files (keep only what's needed)
+config.yaml
+config.yml
+*.yaml
+*.yml
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE specific files
+*.sublime-project
+*.sublime-workspace
+.vscode/
+.idea/
+*.iml
+
+# Coverage reports
+coverage/
+*.cover
+*.coverprofile
+
+# Dependency directories
+vendor/
+
+# Local development files
+local-event.json
+event_agg_queries.md
+EVENT_POST_PROCESSING_ANALYSIS.md
+queries.md
+
+# Makefile and build scripts
+Makefile
+makefile
+
+# Ellipsis config
+ellipsis.yaml
+
+# Swagger docs - KEEP THIS (needed for Go imports)
+# docs/swagger/
+
+# Test utilities
+internal/testutil/
