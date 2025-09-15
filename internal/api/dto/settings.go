@@ -90,7 +90,8 @@ func (r *CreateSettingRequest) Validate() error {
 		return errors.New("key cannot exceed 255 characters")
 	}
 
-	if err := types.ValidateSettingValue(r.Key, r.Value); err != nil {
+	// Use the new settings registry for validation
+	if err := settings.ValidateSettingValue(r.Key, r.Value); err != nil {
 		return err
 	}
 
@@ -113,7 +114,8 @@ type UpdateSettingRequest struct {
 
 // UpdateSettingRequest represents the request to update an existing setting
 func (r *UpdateSettingRequest) Validate(key string) error {
-	if err := types.ValidateSettingValue(key, r.Value); err != nil {
+	// Use the new settings registry for validation
+	if err := settings.ValidateSettingValue(key, r.Value); err != nil {
 		return err
 	}
 

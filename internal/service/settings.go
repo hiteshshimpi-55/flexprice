@@ -33,13 +33,18 @@ func (s *settingsService) GetSettingByKey(ctx context.Context, key string) (*dto
 	if err != nil {
 		// If setting not found, check if we should return default values
 		if ent.IsNotFound(err) {
-			// Check if this key has default values
-			if defaultSetting, exists := types.GetDefaultSettings()[types.SettingKey(key)]; exists {
+			// Check if this key has default values using the new registry
+			if settings.IsValidSettingKey(key) {
+				defaultValue, err := settings.GetDefaultSettingValue(key)
+				if err != nil {
+					return nil, err
+				}
+
 				// Create and return a setting with default values
 				defaultSettingModel := &settings.Setting{
 					ID:            types.GenerateUUIDWithPrefix(types.UUID_PREFIX_SETTING),
-					Key:           string(defaultSetting.Key),
-					Value:         defaultSetting.DefaultValue,
+					Key:           key,
+					Value:         defaultValue,
 					EnvironmentID: types.GetEnvironmentID(ctx),
 					BaseModel:     types.GetDefaultBaseModel(ctx),
 				}
@@ -73,8 +78,8 @@ func (s *settingsService) updateSetting(ctx context.Context, setting *settings.S
 }
 
 func (s *settingsService) UpdateSettingByKey(ctx context.Context, key string, req *dto.UpdateSettingRequest) (*dto.SettingResponse, error) {
-	// STEP 1: Validate the request
-	if err := req.Validate(key); err != nil {
+	// STEP 1: Validate the request using the new registry
+	if err := settings.ValidateSettingValue(key, req.Value); err != nil {
 		return nil, err
 	}
 
