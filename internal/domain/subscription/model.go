@@ -113,9 +113,9 @@ type Subscription struct {
 
 	CouponAssociations []*coupon_association.CouponAssociation `json:"coupon_associations,omitempty"`
 
-	CustomerTimezone string `json:"customer_timezone"`
+	CustomerTimezone string `json:"customer_timezone,default=UTC"`
 
-	ProrationBehavior types.ProrationBehavior `json:"proration_behavior"`
+	ProrationBehavior types.ProrationBehavior `json:"proration_behavior,default=none"`
 
 	types.BaseModel
 }

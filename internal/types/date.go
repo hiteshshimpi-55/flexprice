@@ -138,7 +138,13 @@ func NextBillingDate(currentPeriodStart, billingAnchor time.Time, unit int, peri
 // PreviousBillingDate calculates the previous billing date by going backwards from the billing anchor
 // by the specified period duration. This is useful for proration calculations where we need to determine
 // the start of a full billing period that ends at the billing anchor.
-func PreviousBillingDate(billingAnchor time.Time, unit int, period BillingPeriod) (time.Time, error) {
+//
+// Timezone handling:
+// - The function uses the customer timezone for all calculations
+// - The billingAnchor is converted to the customer timezone before calculations
+// - The returned time will be in the customer timezone
+// - Time components (hour, minute, second) are preserved from the billing anchor in customer timezone
+func PreviousBillingDate(billingAnchor time.Time, unit int, period BillingPeriod, customerTimezone string) (time.Time, error) {
 	if unit <= 0 {
 		return billingAnchor, ierr.NewError("billing period unit must be a positive integer").
 			WithHint("Billing period unit must be a positive integer").
@@ -150,12 +156,33 @@ func PreviousBillingDate(billingAnchor time.Time, unit int, period BillingPeriod
 			Mark(ierr.ErrValidation)
 	}
 
+	// Load customer timezone
+	loc, err := time.LoadLocation(customerTimezone)
+	if err != nil {
+		return billingAnchor, ierr.NewError("invalid customer timezone").
+			WithHintf("failed to load customer timezone '%s': %v", customerTimezone, err).
+			WithReportableDetails(
+				map[string]any{
+					"customer_timezone": customerTimezone,
+					"error":             err.Error(),
+				},
+			).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Convert billing anchor to customer timezone
+	billingAnchorInTZ := billingAnchor.In(loc)
+
 	// For daily and weekly periods, we can use simple subtraction
 	switch period {
 	case BILLING_PERIOD_DAILY:
-		return billingAnchor.AddDate(0, 0, -unit), nil
+		previousDate := billingAnchorInTZ.AddDate(0, 0, -unit)
+		return time.Date(previousDate.Year(), previousDate.Month(), previousDate.Day(),
+			billingAnchorInTZ.Hour(), billingAnchorInTZ.Minute(), billingAnchorInTZ.Second(), 0, loc), nil
 	case BILLING_PERIOD_WEEKLY:
-		return billingAnchor.AddDate(0, 0, -unit*7), nil
+		previousDate := billingAnchorInTZ.AddDate(0, 0, -unit*7)
+		return time.Date(previousDate.Year(), previousDate.Month(), previousDate.Day(),
+			billingAnchorInTZ.Hour(), billingAnchorInTZ.Minute(), billingAnchorInTZ.Second(), 0, loc), nil
 	}
 
 	// For monthly and annual periods, calculate the target year and month
@@ -180,9 +207,9 @@ func PreviousBillingDate(billingAnchor time.Time, unit int, period BillingPeriod
 			Mark(ierr.ErrValidation)
 	}
 
-	// Get the anchor year, month, and time components
-	y, m, d := billingAnchor.Date()
-	h, min, sec := billingAnchor.Clock()
+	// Get the anchor year, month, and time components from customer timezone
+	y, m, d := billingAnchorInTZ.Date()
+	h, min, sec := billingAnchorInTZ.Clock()
 
 	// Calculate the target year and month
 	targetY := y + years
@@ -200,14 +227,14 @@ func PreviousBillingDate(billingAnchor time.Time, unit int, period BillingPeriod
 
 	// For annual billing, preserve the billing anchor month and day
 	if period == BILLING_PERIOD_ANNUAL {
-		targetM = billingAnchor.Month()
+		targetM = billingAnchorInTZ.Month()
 	}
 
 	// Get the target day from the billing anchor
 	targetD := d
 
 	// Find the last day of the target month
-	lastDayOfMonth := time.Date(targetY, targetM+1, 0, 0, 0, 0, 0, billingAnchor.Location()).Day()
+	lastDayOfMonth := time.Date(targetY, targetM+1, 0, 0, 0, 0, 0, loc).Day()
 
 	// Special handling for month-end dates and February
 	if targetD > lastDayOfMonth {
@@ -216,13 +243,13 @@ func PreviousBillingDate(billingAnchor time.Time, unit int, period BillingPeriod
 
 	// Special case for February 29th in leap years
 	if period == BILLING_PERIOD_ANNUAL &&
-		billingAnchor.Month() == time.February &&
-		billingAnchor.Day() == 29 &&
+		billingAnchorInTZ.Month() == time.February &&
+		billingAnchorInTZ.Day() == 29 &&
 		!isLeapYear(targetY) {
 		targetD = 28
 	}
 
-	return time.Date(targetY, targetM, targetD, h, min, sec, 0, billingAnchor.Location()), nil
+	return time.Date(targetY, targetM, targetD, h, min, sec, 0, loc), nil
 }
 
 // isLeapYear returns true if the given year is a leap year

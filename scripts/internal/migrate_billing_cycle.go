@@ -125,7 +125,7 @@ func migrateBillingCycle(params MigrateBillingCycleParams) error {
 		fmt.Printf("  Current period end: %s\n", sub.CurrentPeriodEnd.Format(time.RFC3339))
 
 		// Calculate new billing anchor for calendar billing
-		newBillingAnchor := types.CalculateCalendarBillingAnchor(sub.StartDate, sub.BillingPeriod)
+		newBillingAnchor := types.CalculateCalendarBillingAnchor(sub.StartDate, sub.BillingPeriod, sub.CustomerTimezone)
 		fmt.Printf("  New billing anchor (calendar): %s\n", newBillingAnchor.Format(time.RFC3339))
 
 		// Calculate new current period end using the subscription start date and new billing anchor

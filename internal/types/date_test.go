@@ -146,7 +146,7 @@ func TestNextBillingDate_Monthly_Calendar(t *testing.T) {
 		{
 			name:          "start: 15 jan 2024, anchor: 1 feb 2024, unit: 1",
 			currentPeriod: time.Date(2024, time.January, 15, 0, 0, 0, 0, time.UTC),
-			billingAnchor: CalculateCalendarBillingAnchor(time.Date(2024, time.January, 15, 0, 0, 0, 0, time.UTC), BILLING_PERIOD_MONTHLY),
+			billingAnchor: CalculateCalendarBillingAnchor(time.Date(2024, time.January, 15, 0, 0, 0, 0, time.UTC), BILLING_PERIOD_MONTHLY, "UTC"),
 			unit:          1,
 			want:          time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC),
 			wantErr:       false,

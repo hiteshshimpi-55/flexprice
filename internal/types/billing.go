@@ -106,13 +106,29 @@ func (b BillingCycle) Validate() error {
 	return nil
 }
 
-func CalculateCalendarBillingAnchor(startDate time.Time, billingPeriod BillingPeriod) time.Time {
-	now := startDate.UTC()
+// CalculateCalendarBillingAnchor calculates the billing anchor for calendar-based billing cycles.
+// It determines the appropriate billing anchor based on the billing period and customer timezone.
+//
+// Timezone handling:
+// - All calculations are performed in the customer timezone
+// - The returned time will be in the customer timezone
+// - If the customer timezone is invalid, falls back to UTC
+// - Calendar boundaries (start of day, week, month, etc.) are calculated in customer timezone
+func CalculateCalendarBillingAnchor(startDate time.Time, billingPeriod BillingPeriod, customerTimezone string) time.Time {
+	// Load customer timezone, fallback to UTC if invalid
+	loc, err := time.LoadLocation(customerTimezone)
+	if err != nil {
+		// Fallback to UTC if timezone is invalid
+		loc = time.UTC
+	}
+	
+	// Convert start date to customer timezone for calculations
+	now := startDate.In(loc)
 
 	switch billingPeriod {
 	case BILLING_PERIOD_DAILY:
 		// Start of next day: 00:00:00
-		return time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.UTC)
+		return time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, loc)
 
 	case BILLING_PERIOD_WEEKLY:
 		// Start of next week (Monday)
@@ -120,11 +136,11 @@ func CalculateCalendarBillingAnchor(startDate time.Time, billingPeriod BillingPe
 		if daysUntilMonday == 0 {
 			daysUntilMonday = 7
 		}
-		return time.Date(now.Year(), now.Month(), now.Day()+daysUntilMonday, 0, 0, 0, 0, time.UTC)
+		return time.Date(now.Year(), now.Month(), now.Day()+daysUntilMonday, 0, 0, 0, 0, loc)
 
 	case BILLING_PERIOD_MONTHLY:
 		// Start of next month
-		return time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.UTC)
+		return time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, loc)
 
 	case BILLING_PERIOD_QUARTER:
 		// Start of next quarter
@@ -132,9 +148,9 @@ func CalculateCalendarBillingAnchor(startDate time.Time, billingPeriod BillingPe
 		startNextQuarterMonth := time.Month(quarter*3 + 1)
 		if startNextQuarterMonth > 12 {
 			startNextQuarterMonth -= 12
-			return time.Date(now.Year()+1, startNextQuarterMonth, 1, 0, 0, 0, 0, time.UTC)
+			return time.Date(now.Year()+1, startNextQuarterMonth, 1, 0, 0, 0, 0, loc)
 		}
-		return time.Date(now.Year(), startNextQuarterMonth, 1, 0, 0, 0, 0, time.UTC)
+		return time.Date(now.Year(), startNextQuarterMonth, 1, 0, 0, 0, 0, loc)
 
 	case BILLING_PERIOD_HALF_YEAR:
 		// Start of next half-year
@@ -142,13 +158,13 @@ func CalculateCalendarBillingAnchor(startDate time.Time, billingPeriod BillingPe
 		startNextHalfYearMonth := time.Month(halfYear*6 + 1)
 		if startNextHalfYearMonth > 12 {
 			startNextHalfYearMonth -= 12
-			return time.Date(now.Year()+1, startNextHalfYearMonth, 1, 0, 0, 0, 0, time.UTC)
+			return time.Date(now.Year()+1, startNextHalfYearMonth, 1, 0, 0, 0, 0, loc)
 		}
-		return time.Date(now.Year(), startNextHalfYearMonth, 1, 0, 0, 0, 0, time.UTC)
+		return time.Date(now.Year(), startNextHalfYearMonth, 1, 0, 0, 0, 0, loc)
 
 	case BILLING_PERIOD_ANNUAL:
 		// Start of next year
-		return time.Date(now.Year()+1, 1, 1, 0, 0, 0, 0, time.UTC)
+		return time.Date(now.Year()+1, 1, 1, 0, 0, 0, 0, loc)
 
 	default:
 		return now

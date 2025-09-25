@@ -74,7 +74,7 @@ type CreateSubscriptionRequest struct {
 	// create_prorations means the proration will be calculated and applied.
 	// none means the proration will not be calculated.
 	// This is IGNORED when the billing cycle is anniversary.
-	ProrationBehavior types.ProrationBehavior `json:"proration_behavior,omitempty"`
+	ProrationBehavior types.ProrationBehavior `json:"proration_behavior,default=none"`
 
 	// Timezone of the customer.
 	// If not set, the default value is UTC.
@@ -264,22 +264,19 @@ func (r *CreateSubscriptionRequest) Validate() error {
 			Mark(ierr.ErrValidation)
 	}
 
-	if r.ProrationBehavior != "" {
-		if err := r.ProrationBehavior.Validate(); err != nil {
-			return err
-		}
-	} else {
-		r.ProrationBehavior = types.ProrationBehaviorNone
+	if err := r.ProrationBehavior.Validate(); err != nil {
+		return err
 	}
+
 	if r.Workflow == nil {
 		r.Workflow = lo.ToPtr(types.TemporalSubscriptionChangeWorkflow)
 	}
 
-	if r.ProrationBehavior != "" && r.ProrationBehavior == types.ProrationBehaviorCreateProrations {
-		if err := r.validateShouldAllowProrationOnStartDate(r); err != nil {
-			return err
-		}
-	}
+	// if r.ProrationBehavior != "" && r.ProrationBehavior == types.ProrationBehaviorCreateProrations {
+	// 	if err := r.validateShouldAllowProrationOnStartDate(r); err != nil {
+	// 		return err
+	// 	}
+	// }
 
 	if r.BillingPeriodCount < 1 {
 		return ierr.NewError("billing_period_count must be greater than 0").
