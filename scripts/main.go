@@ -108,6 +108,11 @@ var commands = []Command{
 		Description: "Process CSV file to create features and prices for serverless plan",
 		Run:         internal.ProcessCSVFeatures,
 	},
+	{
+		Name:        "update-plan-prices",
+		Description: "Update plan prices",
+		Run:         internal.UpdatePlanPrices,
+	},
 }
 
 // runBulkReprocessEventsCommand wraps the bulk reprocess events with command line parameters
