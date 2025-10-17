@@ -882,6 +882,40 @@ var (
 			},
 		},
 	}
+	// GroupsColumns holds the columns for the "groups" table.
+	GroupsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString, Unique: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "tenant_id", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "status", Type: field.TypeString, Default: "published", SchemaType: map[string]string{"postgres": "varchar(20)"}},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "created_by", Type: field.TypeString, Nullable: true},
+		{Name: "updated_by", Type: field.TypeString, Nullable: true},
+		{Name: "environment_id", Type: field.TypeString, Nullable: true, Default: "", SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "name", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(255)"}},
+		{Name: "entity_type", Type: field.TypeString, Default: "price", SchemaType: map[string]string{"postgres": "varchar(50)"}},
+	}
+	// GroupsTable holds the schema information for the "groups" table.
+	GroupsTable = &schema.Table{
+		Name:       "groups",
+		Columns:    GroupsColumns,
+		PrimaryKey: []*schema.Column{GroupsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "group_tenant_id_environment_id_name",
+				Unique:  true,
+				Columns: []*schema.Column{GroupsColumns[1], GroupsColumns[7], GroupsColumns[8]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "status = 'published'",
+				},
+			},
+			{
+				Name:    "group_tenant_id_environment_id_entity_type",
+				Unique:  false,
+				Columns: []*schema.Column{GroupsColumns[1], GroupsColumns[7], GroupsColumns[9]},
+			},
+		},
+	}
 	// InvoicesColumns holds the columns for the "invoices" table.
 	InvoicesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString, Unique: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
@@ -1291,6 +1325,7 @@ var (
 		{Name: "start_date", Type: field.TypeTime, Nullable: true},
 		{Name: "end_date", Type: field.TypeTime, Nullable: true},
 		{Name: "addon_prices", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "group_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "price_unit_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 	}
 	// PricesTable holds the schema information for the "prices" table.
@@ -1306,8 +1341,14 @@ var (
 				OnDelete:   schema.SetNull,
 			},
 			{
-				Symbol:     "prices_price_unit_price_unit_edge",
+				Symbol:     "prices_groups_prices",
 				Columns:    []*schema.Column{PricesColumns[38]},
+				RefColumns: []*schema.Column{GroupsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "prices_price_unit_price_unit_edge",
+				Columns:    []*schema.Column{PricesColumns[39]},
 				RefColumns: []*schema.Column{PriceUnitColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -1330,6 +1371,16 @@ var (
 				Name:    "price_start_date_end_date",
 				Unique:  false,
 				Columns: []*schema.Column{PricesColumns[35], PricesColumns[36]},
+			},
+			{
+				Name:    "price_group_id",
+				Unique:  false,
+				Columns: []*schema.Column{PricesColumns[38]},
+			},
+			{
+				Name:    "price_tenant_id_environment_id_group_id",
+				Unique:  false,
+				Columns: []*schema.Column{PricesColumns[1], PricesColumns[7], PricesColumns[38]},
 			},
 		},
 	}
@@ -2142,6 +2193,7 @@ var (
 		EntityIntegrationMappingsTable,
 		EnvironmentsTable,
 		FeaturesTable,
+		GroupsTable,
 		InvoicesTable,
 		InvoiceLineItemsTable,
 		InvoiceSequencesTable,
@@ -2190,7 +2242,8 @@ func init() {
 	InvoiceLineItemsTable.ForeignKeys[0].RefTable = InvoicesTable
 	PaymentAttemptsTable.ForeignKeys[0].RefTable = PaymentsTable
 	PricesTable.ForeignKeys[0].RefTable = AddonsTable
-	PricesTable.ForeignKeys[1].RefTable = PriceUnitTable
+	PricesTable.ForeignKeys[1].RefTable = GroupsTable
+	PricesTable.ForeignKeys[2].RefTable = PriceUnitTable
 	PriceUnitTable.Annotation = &entsql.Annotation{
 		Table: "price_unit",
 	}
