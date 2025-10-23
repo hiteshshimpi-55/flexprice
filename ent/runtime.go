@@ -24,6 +24,7 @@ import (
 	"github.com/flexprice/flexprice/ent/entityintegrationmapping"
 	"github.com/flexprice/flexprice/ent/environment"
 	"github.com/flexprice/flexprice/ent/feature"
+	"github.com/flexprice/flexprice/ent/group"
 	"github.com/flexprice/flexprice/ent/invoice"
 	"github.com/flexprice/flexprice/ent/invoicelineitem"
 	"github.com/flexprice/flexprice/ent/invoicesequence"
@@ -876,6 +877,43 @@ func init() {
 	featureDescType := featureFields[4].Descriptor()
 	// feature.TypeValidator is a validator for the "type" field. It is called by the builders before save.
 	feature.TypeValidator = featureDescType.Validators[0].(func(string) error)
+	groupMixin := schema.Group{}.Mixin()
+	groupMixinFields0 := groupMixin[0].Fields()
+	_ = groupMixinFields0
+	groupMixinFields1 := groupMixin[1].Fields()
+	_ = groupMixinFields1
+	groupFields := schema.Group{}.Fields()
+	_ = groupFields
+	// groupDescTenantID is the schema descriptor for tenant_id field.
+	groupDescTenantID := groupMixinFields0[0].Descriptor()
+	// group.TenantIDValidator is a validator for the "tenant_id" field. It is called by the builders before save.
+	group.TenantIDValidator = groupDescTenantID.Validators[0].(func(string) error)
+	// groupDescStatus is the schema descriptor for status field.
+	groupDescStatus := groupMixinFields0[1].Descriptor()
+	// group.DefaultStatus holds the default value on creation for the status field.
+	group.DefaultStatus = groupDescStatus.Default.(string)
+	// groupDescCreatedAt is the schema descriptor for created_at field.
+	groupDescCreatedAt := groupMixinFields0[2].Descriptor()
+	// group.DefaultCreatedAt holds the default value on creation for the created_at field.
+	group.DefaultCreatedAt = groupDescCreatedAt.Default.(func() time.Time)
+	// groupDescUpdatedAt is the schema descriptor for updated_at field.
+	groupDescUpdatedAt := groupMixinFields0[3].Descriptor()
+	// group.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	group.DefaultUpdatedAt = groupDescUpdatedAt.Default.(func() time.Time)
+	// group.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	group.UpdateDefaultUpdatedAt = groupDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// groupDescEnvironmentID is the schema descriptor for environment_id field.
+	groupDescEnvironmentID := groupMixinFields1[0].Descriptor()
+	// group.DefaultEnvironmentID holds the default value on creation for the environment_id field.
+	group.DefaultEnvironmentID = groupDescEnvironmentID.Default.(string)
+	// groupDescName is the schema descriptor for name field.
+	groupDescName := groupFields[1].Descriptor()
+	// group.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	group.NameValidator = groupDescName.Validators[0].(func(string) error)
+	// groupDescEntityType is the schema descriptor for entity_type field.
+	groupDescEntityType := groupFields[2].Descriptor()
+	// group.DefaultEntityType holds the default value on creation for the entity_type field.
+	group.DefaultEntityType = groupDescEntityType.Default.(string)
 	invoiceMixin := schema.Invoice{}.Mixin()
 	invoiceMixinFields0 := invoiceMixin[0].Fields()
 	_ = invoiceMixinFields0

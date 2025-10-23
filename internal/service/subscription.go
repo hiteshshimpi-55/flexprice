@@ -357,7 +357,7 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 	if invoice != nil {
 		response.LatestInvoice = invoice
 	}
-	s.publishInternalWebhookEvent(ctx, types.WebhookEventSubscriptionCreated, sub.ID)
+	// s.publishInternalWebhookEvent(ctx, types.WebhookEventSubscriptionCreated, sub.ID)
 	return response, nil
 }
 

@@ -47,6 +47,8 @@ type CreatePriceRequest struct {
 
 	// ParentPriceID is the id of the parent price for this price
 	ParentPriceID string `json:"-"`
+
+	GroupID string `json:"group_id,omitempty"`
 }
 
 type PriceUnitConfig struct {
@@ -637,6 +639,7 @@ func (r *CreatePriceRequest) ToPrice(ctx context.Context) (*priceDomain.Price, e
 		EndDate:            r.EndDate,
 		EnvironmentID:      types.GetEnvironmentID(ctx),
 		BaseModel:          types.GetDefaultBaseModel(ctx),
+		GroupID:            r.GroupID,
 	}
 
 	price.DisplayAmount = price.GetDisplayAmount()

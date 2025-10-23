@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/flexprice/flexprice/ent/costsheet"
+	"github.com/flexprice/flexprice/ent/group"
 	"github.com/flexprice/flexprice/ent/price"
 	"github.com/flexprice/flexprice/ent/priceunit"
 	"github.com/flexprice/flexprice/internal/types"
@@ -437,6 +438,20 @@ func (pc *PriceCreate) SetNillableEndDate(t *time.Time) *PriceCreate {
 	return pc
 }
 
+// SetGroupID sets the "group_id" field.
+func (pc *PriceCreate) SetGroupID(s string) *PriceCreate {
+	pc.mutation.SetGroupID(s)
+	return pc
+}
+
+// SetNillableGroupID sets the "group_id" field if the given value is not nil.
+func (pc *PriceCreate) SetNillableGroupID(s *string) *PriceCreate {
+	if s != nil {
+		pc.SetGroupID(*s)
+	}
+	return pc
+}
+
 // SetID sets the "id" field.
 func (pc *PriceCreate) SetID(s string) *PriceCreate {
 	pc.mutation.SetID(s)
@@ -475,6 +490,11 @@ func (pc *PriceCreate) SetNillablePriceUnitEdgeID(id *string) *PriceCreate {
 // SetPriceUnitEdge sets the "price_unit_edge" edge to the PriceUnit entity.
 func (pc *PriceCreate) SetPriceUnitEdge(p *PriceUnit) *PriceCreate {
 	return pc.SetPriceUnitEdgeID(p.ID)
+}
+
+// SetGroup sets the "group" edge to the Group entity.
+func (pc *PriceCreate) SetGroup(g *Group) *PriceCreate {
+	return pc.SetGroupID(g.ID)
 }
 
 // Mutation returns the PriceMutation object of the builder.
@@ -845,6 +865,23 @@ func (pc *PriceCreate) createSpec() (*Price, *sqlgraph.CreateSpec) {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		_node.PriceUnitID = nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := pc.mutation.GroupIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: false,
+			Table:   price.GroupTable,
+			Columns: []string{price.GroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_node.GroupID = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec

@@ -108,6 +108,11 @@ var commands = []Command{
 		Description: "Process CSV file to create features and prices for serverless plan",
 		Run:         internal.ProcessCSVFeatures,
 	},
+	{
+		Name:        "complete-migration",
+		Description: "Complete migration: create master plan, group prices, cancel subscriptions, create new subscriptions",
+		Run:         internal.CompleteMigration,
+	},
 }
 
 // runBulkReprocessEventsCommand wraps the bulk reprocess events with command line parameters

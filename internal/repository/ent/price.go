@@ -88,7 +88,8 @@ func (r *priceRepository) Create(ctx context.Context, p *domainPrice.Price) erro
 		SetEnvironmentID(p.EnvironmentID).
 		SetNillableParentPriceID(lo.ToPtr(p.ParentPriceID)).
 		SetEntityType(string(p.EntityType)).
-		SetEntityID(p.EntityID)
+		SetEntityID(p.EntityID).
+		SetGroupID(p.GroupID)
 
 	if p.PriceUnitID != "" {
 		priceBuilder.SetPriceUnitID(p.PriceUnitID)
@@ -421,7 +422,8 @@ func (r *priceRepository) CreateBulk(ctx context.Context, prices []*domainPrice.
 			SetCreatedAt(p.CreatedAt).
 			SetUpdatedAt(p.UpdatedAt).
 			SetCreatedBy(p.CreatedBy).
-			SetUpdatedBy(p.UpdatedBy)
+			SetUpdatedBy(p.UpdatedBy).
+			SetGroupID(p.GroupID)
 	}
 
 	_, err := client.Price.CreateBulk(builders...).Save(ctx)
