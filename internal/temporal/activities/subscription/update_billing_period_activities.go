@@ -706,3 +706,102 @@ func (s *UpdateBillingPeriodActivities) CheckSubscriptionCancellationActivity(
 
 	return output, nil
 }
+
+// CheckSubscriptionTrialStatusActivity checks and handles subscription trial status
+// It determines if a subscription is in trial, handles trial-to-active transitions,
+// and returns whether billing processing should continue
+func (s *UpdateBillingPeriodActivities) CheckSubscriptionTrialStatusActivity(
+	ctx context.Context,
+	input subscriptionModels.CheckSubscriptionTrialStatusActivityInput,
+) (*subscriptionModels.CheckSubscriptionTrialStatusActivityOutput, error) {
+	if err := input.Validate(); err != nil {
+		return nil, err
+	}
+
+	// Set context values
+	ctx = types.SetTenantID(ctx, input.TenantID)
+	ctx = types.SetEnvironmentID(ctx, input.EnvironmentID)
+
+	// Get the subscription
+	sub, err := s.serviceParams.SubRepo.Get(ctx, input.SubscriptionID)
+	if err != nil {
+		return nil, err
+	}
+
+	now := input.CurrentTime
+	output := &subscriptionModels.CheckSubscriptionTrialStatusActivityOutput{
+		IsInTrial:          false,
+		TrialEnded:         false,
+		ShouldSkipBilling:  false,
+		StatusTransitioned: false,
+	}
+
+	// Check if subscription has trial period
+	if sub.TrialStart == nil || sub.TrialEnd == nil {
+		// No trial, proceed with normal billing
+		return output, nil
+	}
+
+	// Check trial status
+	if now.Before(*sub.TrialEnd) {
+		// Still in trial period
+		output.IsInTrial = true
+		output.TrialEndDate = sub.TrialEnd
+		output.ShouldSkipBilling = true
+
+		// Ensure subscription status is 'trialing'
+		if sub.SubscriptionStatus != types.SubscriptionStatusTrialing {
+			sub.SubscriptionStatus = types.SubscriptionStatusTrialing
+			if err := s.serviceParams.SubRepo.Update(ctx, sub); err != nil {
+				return nil, err
+			}
+			s.logger.Infow("corrected subscription status to trialing",
+				"subscription_id", sub.ID,
+				"trial_end", sub.TrialEnd)
+		}
+
+		return output, nil
+	}
+
+	// Trial has ended - transition to active
+	output.TrialEnded = true
+	output.TrialEndDate = sub.TrialEnd
+
+	if sub.SubscriptionStatus == types.SubscriptionStatusTrialing {
+		// Transition from trialing to active
+		sub.SubscriptionStatus = types.SubscriptionStatusActive
+
+		// Set billing period to start from trial end date
+		// This ensures first invoice is generated from trial end
+		sub.CurrentPeriodStart = *sub.TrialEnd
+		nextEnd, err := types.NextBillingDate(
+			*sub.TrialEnd,
+			sub.BillingAnchor,
+			sub.BillingPeriodCount,
+			sub.BillingPeriod,
+			sub.EndDate,
+		)
+		if err != nil {
+			return nil, err
+		}
+		sub.CurrentPeriodEnd = nextEnd
+
+		if err := s.serviceParams.SubRepo.Update(ctx, sub); err != nil {
+			return nil, err
+		}
+
+		output.StatusTransitioned = true
+		output.NewCurrentPeriodStart = &sub.CurrentPeriodStart
+		output.NewCurrentPeriodEnd = &sub.CurrentPeriodEnd
+
+		s.logger.Infow("transitioned subscription from trial to active",
+			"subscription_id", sub.ID,
+			"trial_end", sub.TrialEnd,
+			"new_period_start", sub.CurrentPeriodStart,
+			"new_period_end", sub.CurrentPeriodEnd)
+	}
+
+	// After transition, continue with normal billing
+	output.ShouldSkipBilling = false
+	return output, nil
+}

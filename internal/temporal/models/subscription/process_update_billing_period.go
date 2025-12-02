@@ -412,3 +412,47 @@ type CheckSubscriptionCancellationActivityOutput struct {
 	ShouldCancel bool       `json:"should_cancel"`
 	CancelledAt  *time.Time `json:"cancelled_at,omitempty"`
 }
+
+// CheckSubscriptionTrialStatusActivityInput represents the input for checking subscription trial status
+type CheckSubscriptionTrialStatusActivityInput struct {
+	SubscriptionID string    `json:"subscription_id"`
+	TenantID       string    `json:"tenant_id"`
+	EnvironmentID  string    `json:"environment_id"`
+	CurrentTime    time.Time `json:"current_time"`
+}
+
+// Validate validates the check subscription trial status activity input
+func (i *CheckSubscriptionTrialStatusActivityInput) Validate() error {
+	if i.SubscriptionID == "" {
+		return ierr.NewError("subscription_id is required").
+			WithHint("Subscription ID is required").
+			Mark(ierr.ErrValidation)
+	}
+	if i.TenantID == "" {
+		return ierr.NewError("tenant_id is required").
+			WithHint("Tenant ID is required").
+			Mark(ierr.ErrValidation)
+	}
+	if i.EnvironmentID == "" {
+		return ierr.NewError("environment_id is required").
+			WithHint("Environment ID is required").
+			Mark(ierr.ErrValidation)
+	}
+	if i.CurrentTime.IsZero() {
+		return ierr.NewError("current_time is required").
+			WithHint("Current Time is required").
+			Mark(ierr.ErrValidation)
+	}
+	return nil
+}
+
+// CheckSubscriptionTrialStatusActivityOutput represents the output for checking subscription trial status
+type CheckSubscriptionTrialStatusActivityOutput struct {
+	IsInTrial             bool       `json:"is_in_trial"`
+	TrialEnded            bool       `json:"trial_ended"`
+	TrialEndDate          *time.Time `json:"trial_end_date,omitempty"`
+	ShouldSkipBilling     bool       `json:"should_skip_billing"`
+	StatusTransitioned    bool       `json:"status_transitioned"`
+	NewCurrentPeriodStart *time.Time `json:"new_current_period_start,omitempty"`
+	NewCurrentPeriodEnd   *time.Time `json:"new_current_period_end,omitempty"`
+}

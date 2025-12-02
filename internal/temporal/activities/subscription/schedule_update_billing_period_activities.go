@@ -52,7 +52,10 @@ func (s *SubscriptionActivities) ScheduleSubscriptionUpdateBillingPeriod(ctx con
 				Offset: lo.ToPtr(offset),
 				Status: lo.ToPtr(types.StatusPublished),
 			},
-			SubscriptionStatus: []types.SubscriptionStatus{types.SubscriptionStatusActive},
+			SubscriptionStatus: []types.SubscriptionStatus{
+				types.SubscriptionStatusActive,
+				types.SubscriptionStatusTrialing,
+			},
 			TimeRangeFilter: &types.TimeRangeFilter{
 				EndTime: &now,
 			},

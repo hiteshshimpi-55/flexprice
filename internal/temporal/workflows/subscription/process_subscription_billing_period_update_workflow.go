@@ -13,6 +13,7 @@ const (
 	WorkflowProcessSubscriptionBillingPeriodUpdate = "ProcessSubscriptionBillingPeriodUpdateWorkflow"
 	// Activity names - must match the registered method names
 	ActivityCheckSubscriptionPauseStatus  = "CheckSubscriptionPauseStatusActivity"
+	ActivityCheckSubscriptionTrialStatus  = "CheckSubscriptionTrialStatusActivity"
 	ActivityCalculatePeriods              = "CalculatePeriodsActivity"
 	ActivityProcessPeriods                = "ProcessPeriodsActivity"
 	ActivityUpdateSubscriptionPeriod      = "UpdateSubscriptionPeriodActivity"
@@ -104,6 +105,54 @@ func ProcessSubscriptionBillingPeriodUpdateWorkflow(
 			Success:     true,
 			CompletedAt: workflow.Now(ctx),
 		}, nil
+	}
+
+	// ================================================================================
+	// STEP 1.5: Check Subscription Trial Status
+	// ================================================================================
+	logger.Info("Step 1.5: Checking subscription trial status",
+		"subscription_id", input.SubscriptionID)
+
+	var trialStatusOutput subscriptionModels.CheckSubscriptionTrialStatusActivityOutput
+	trialStatusInput := subscriptionModels.CheckSubscriptionTrialStatusActivityInput{
+		SubscriptionID: input.SubscriptionID,
+		TenantID:       input.TenantID,
+		EnvironmentID:  input.EnvironmentID,
+		CurrentTime:    now,
+	}
+
+	err = workflow.ExecuteActivity(ctx, ActivityCheckSubscriptionTrialStatus, trialStatusInput).Get(ctx, &trialStatusOutput)
+	if err != nil {
+		logger.Error("Failed to check subscription trial status",
+			"error", err,
+			"subscription_id", input.SubscriptionID)
+		errorMsg := err.Error()
+		return &subscriptionModels.ProcessSubscriptionUpdateBillingPeriodWorkflowResult{
+			Success:     false,
+			Error:       &errorMsg,
+			CompletedAt: workflow.Now(ctx),
+		}, nil
+	}
+
+	// If in trial, skip billing processing
+	if trialStatusOutput.ShouldSkipBilling {
+		logger.Info("Skipping billing period processing - subscription in trial",
+			"subscription_id", input.SubscriptionID,
+			"is_in_trial", trialStatusOutput.IsInTrial,
+			"trial_end_date", trialStatusOutput.TrialEndDate)
+		return &subscriptionModels.ProcessSubscriptionUpdateBillingPeriodWorkflowResult{
+			Success:     true,
+			CompletedAt: workflow.Now(ctx),
+		}, nil
+	}
+
+	// Log if trial just ended and status was transitioned
+	if trialStatusOutput.StatusTransitioned {
+		logger.Info("Subscription trial ended - transitioned to active",
+			"subscription_id", input.SubscriptionID,
+			"trial_end_date", trialStatusOutput.TrialEndDate,
+			"new_period_start", trialStatusOutput.NewCurrentPeriodStart,
+			"new_period_end", trialStatusOutput.NewCurrentPeriodEnd)
 	}
 
 	// ================================================================================
