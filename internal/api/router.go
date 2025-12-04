@@ -433,6 +433,12 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			costsheets.POST("/analytics", handlers.RevenueAnalytics.GetDetailedCostAnalytics)
 		}
 
+		// Revenue analytics routes
+		revenue := v1Private.Group("/revenue")
+		{
+			revenue.POST("/timeseries", handlers.RevenueAnalytics.GetRevenueTimeSeries)
+		}
+
 		// Credit note routes
 		creditNotes := v1Private.Group("/creditnotes")
 		{

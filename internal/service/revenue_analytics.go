@@ -458,3 +458,108 @@ func (s *revenueAnalyticsService) expandCostAnalyticsSimple(
 
 	return expandedItems
 }
+
+// GetRevenueTimeSeries retrieves aggregated revenue per time window
+func (s *revenueAnalyticsService) GetRevenueTimeSeries(
+	ctx context.Context,
+	req *dto.GetRevenueTimeSeriesRequest,
+) (*dto.GetRevenueTimeSeriesResponse, error) {
+	// 1. Validate request
+	if err := req.Validate(); err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Invalid revenue time series request").
+			Mark(ierr.ErrValidation)
+	}
+
+	// 2. Build the usage analytics request with window size
+	usageReq := &dto.GetUsageAnalyticsRequest{
+		ExternalCustomerID: req.ExternalCustomerID,
+		FeatureIDs:         req.FeatureIDs,
+		StartTime:          req.StartTime,
+		EndTime:            req.EndTime,
+		WindowSize:         req.WindowSize,
+	}
+
+	// 3. Fetch usage analytics with time series data
+	usageAnalytics, err := s.featureUsageTrackingService.GetDetailedUsageAnalyticsV2(ctx, usageReq)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to fetch revenue analytics").
+			Mark(ierr.ErrInternal)
+	}
+
+	// 4. Aggregate points across all features into a single time series
+	return s.aggregateRevenueTimeSeries(usageAnalytics, req), nil
+}
+
+// aggregateRevenueTimeSeries aggregates revenue points from all features into a single time series
+func (s *revenueAnalyticsService) aggregateRevenueTimeSeries(
+	usageAnalytics *dto.GetUsageAnalyticsResponse,
+	req *dto.GetRevenueTimeSeriesRequest,
+) *dto.GetRevenueTimeSeriesResponse {
+	response := &dto.GetRevenueTimeSeriesResponse{
+		TotalRevenue: decimal.Zero,
+		TotalUsage:   decimal.Zero,
+		TotalEvents:  0,
+		Currency:     "USD",
+		StartTime:    req.StartTime,
+		EndTime:      req.EndTime,
+		WindowSize:   req.WindowSize,
+		Points:       []dto.RevenueTimeSeriesPoint{},
+	}
+
+	if usageAnalytics == nil || len(usageAnalytics.Items) == 0 {
+		return response
+	}
+
+	// Set currency from analytics
+	if usageAnalytics.Currency != "" {
+		response.Currency = usageAnalytics.Currency
+	}
+
+	// Use a map to aggregate points by timestamp
+	pointMap := make(map[int64]*dto.RevenueTimeSeriesPoint)
+
+	// Aggregate across all features
+	for _, item := range usageAnalytics.Items {
+		response.TotalRevenue = response.TotalRevenue.Add(item.TotalCost)
+		response.TotalUsage = response.TotalUsage.Add(item.TotalUsage)
+		response.TotalEvents += item.EventCount
+
+		// Aggregate time series points
+		for _, point := range item.Points {
+			timestamp := point.Timestamp.Unix()
+			if existing, exists := pointMap[timestamp]; exists {
+				existing.Revenue = existing.Revenue.Add(point.Cost)
+				existing.Usage = existing.Usage.Add(point.Usage)
+				existing.EventCount += point.EventCount
+			} else {
+				pointMap[timestamp] = &dto.RevenueTimeSeriesPoint{
+					Timestamp:  point.Timestamp,
+					Revenue:    point.Cost,
+					Usage:      point.Usage,
+					EventCount: point.EventCount,
+				}
+			}
+		}
+	}
+
+	// Convert map to sorted slice
+	points := make([]dto.RevenueTimeSeriesPoint, 0, len(pointMap))
+	for _, point := range pointMap {
+		points = append(points, *point)
+	}
+
+	// Sort by timestamp
+	for i := 0; i < len(points)-1; i++ {
+		for j := i + 1; j < len(points); j++ {
+			if points[i].Timestamp.After(points[j].Timestamp) {
+				points[i], points[j] = points[j], points[i]
+			}
+		}
+	}
+
+	response.Points = points
+
+	return response
+}

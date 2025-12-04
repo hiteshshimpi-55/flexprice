@@ -60,3 +60,35 @@ func (h *RevenueAnalyticsHandler) GetDetailedCostAnalytics(c *gin.Context) {
 
 	c.JSON(http.StatusOK, response)
 }
+
+// GetRevenueTimeSeries retrieves aggregated revenue per time window
+// @Summary Get aggregated revenue time series
+// @Description Retrieve total revenue aggregated per time window (HOUR, DAY, WEEK, MONTH). Returns a single time series with revenue summed across all features.
+// @Tags Revenue
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param request body dto.GetRevenueTimeSeriesRequest true "Revenue time series request"
+// @Success 200 {object} dto.GetRevenueTimeSeriesResponse
+// @Failure 400 {object} ierr.ErrorResponse
+// @Failure 500 {object} ierr.ErrorResponse
+// @Router /revenue/timeseries [post]
+func (h *RevenueAnalyticsHandler) GetRevenueTimeSeries(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	var req dto.GetRevenueTimeSeriesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(ierr.WithError(err).
+			WithHint("Please check the request payload").
+			Mark(ierr.ErrValidation))
+		return
+	}
+
+	response, err := h.revenueAnalyticsService.GetRevenueTimeSeries(ctx, &req)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusOK, response)
+}

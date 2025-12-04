@@ -139,3 +139,69 @@ type GetDetailedCostAnalyticsResponse struct {
 	StartTime time.Time `json:"start_time"`
 	EndTime   time.Time `json:"end_time"`
 }
+
+// GetRevenueTimeSeriesRequest represents the request to get aggregated revenue per window
+type GetRevenueTimeSeriesRequest struct {
+	// Time range fields (optional - defaults to last 7 days if not provided)
+	StartTime time.Time `json:"start_time,omitempty"`
+	EndTime   time.Time `json:"end_time,omitempty"`
+
+	// Window size for time series aggregation (required)
+	WindowSize types.WindowSize `json:"window_size" binding:"required"`
+
+	// Optional filters
+	ExternalCustomerID string   `json:"external_customer_id,omitempty"` // Optional - for specific customer
+	FeatureIDs         []string `json:"feature_ids,omitempty"`          // Optional - filter by features
+}
+
+// Validate validates the revenue time series request and sets defaults
+func (r *GetRevenueTimeSeriesRequest) Validate() error {
+	if err := validator.ValidateRequest(r); err != nil {
+		return err
+	}
+
+	// Window size is required
+	if r.WindowSize == "" {
+		return ierr.NewError("window_size is required").
+			WithHint("Please provide a window_size (HOUR, DAY, WEEK, MONTH)").
+			Mark(ierr.ErrValidation)
+	}
+
+	// Validate window size
+	if err := r.WindowSize.Validate(); err != nil {
+		return err
+	}
+
+	// Set default time range to last 7 days if not provided
+	if r.StartTime.IsZero() && r.EndTime.IsZero() {
+		now := time.Now().UTC()
+		r.EndTime = now
+		r.StartTime = now.Add(-7 * 24 * time.Hour)
+	} else if r.StartTime.IsZero() || r.EndTime.IsZero() {
+		return ierr.NewError("both start_time and end_time must be provided if one is specified").
+			WithHint("Please provide both start_time and end_time, or omit both for default 7-day range").
+			Mark(ierr.ErrValidation)
+	}
+
+	return nil
+}
+
+// RevenueTimeSeriesPoint represents a single point in the revenue time series
+type RevenueTimeSeriesPoint struct {
+	Timestamp  time.Time       `json:"timestamp"`
+	Revenue    decimal.Decimal `json:"revenue"`
+	Usage      decimal.Decimal `json:"usage"`
+	EventCount uint64          `json:"event_count"`
+}
+
+// GetRevenueTimeSeriesResponse represents the response for aggregated revenue per window
+type GetRevenueTimeSeriesResponse struct {
+	TotalRevenue decimal.Decimal          `json:"total_revenue"`
+	TotalUsage   decimal.Decimal          `json:"total_usage"`
+	TotalEvents  uint64                   `json:"total_events"`
+	Currency     string                   `json:"currency"`
+	StartTime    time.Time                `json:"start_time"`
+	EndTime      time.Time                `json:"end_time"`
+	WindowSize   types.WindowSize         `json:"window_size"`
+	Points       []RevenueTimeSeriesPoint `json:"points"`
+}

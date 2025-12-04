@@ -70,6 +70,9 @@ type EntityIntegrationMappingService interface {
 type RevenueAnalyticsService interface {
 	// GetDetailedCostAnalytics retrieves detailed cost analytics with derived metrics
 	GetDetailedCostAnalytics(ctx context.Context, req *dto.GetCostAnalyticsRequest) (*dto.GetDetailedCostAnalyticsResponse, error)
+
+	// GetRevenueTimeSeries retrieves aggregated revenue per time window
+	GetRevenueTimeSeries(ctx context.Context, req *dto.GetRevenueTimeSeriesRequest) (*dto.GetRevenueTimeSeriesResponse, error)
 }
 
 type SubscriptionService interface {
