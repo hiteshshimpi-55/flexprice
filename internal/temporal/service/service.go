@@ -342,10 +342,13 @@ func (s *temporalService) buildWorkflowInput(ctx context.Context, workflowType t
 	tenantID := types.GetTenantID(ctx)
 	environmentID := types.GetEnvironmentID(ctx)
 	userID := types.GetUserID(ctx)
+
 	// Handle different workflow types
 	switch workflowType {
 	case types.TemporalPriceSyncWorkflow:
 		return s.buildPriceSyncInput(ctx, tenantID, environmentID, userID, params)
+	case types.TemporalQuickBooksPriceSyncWorkflow:
+		return s.buildQuickBooksPriceSyncInput(ctx, tenantID, environmentID, userID, params)
 	case types.TemporalTaskProcessingWorkflow:
 		return s.buildTaskProcessingInput(ctx, tenantID, environmentID, userID, params)
 	case types.TemporalHubSpotDealSyncWorkflow:
@@ -354,6 +357,8 @@ func (s *temporalService) buildWorkflowInput(ctx context.Context, workflowType t
 		return s.buildHubSpotInvoiceSyncInput(ctx, tenantID, environmentID, params)
 	case types.TemporalHubSpotQuoteSyncWorkflow:
 		return s.buildHubSpotQuoteSyncInput(ctx, tenantID, environmentID, params)
+	case types.TemporalCustomerOnboardingWorkflow:
+		return s.buildCustomerOnboardingInput(ctx, tenantID, environmentID, userID, params)
 	default:
 		return nil, errors.NewError("unsupported workflow type").
 			WithHintf("Workflow type %s is not supported", workflowType.String()).
@@ -385,6 +390,41 @@ func (s *temporalService) buildPriceSyncInput(_ context.Context, tenantID, envir
 		EnvironmentID: environmentID,
 		UserID:        userID,
 	}, nil
+}
+
+// buildQuickBooksPriceSyncInput builds input for QuickBooks price sync workflow
+func (s *temporalService) buildQuickBooksPriceSyncInput(_ context.Context, tenantID, environmentID, userID string, params interface{}) (interface{}, error) {
+	// If already correct type, just ensure context is set
+	if input, ok := params.(models.QuickBooksPriceSyncWorkflowInput); ok {
+		input.TenantID = tenantID
+		input.EnvironmentID = environmentID
+		input.UserID = userID
+		return input, nil
+	}
+
+	// Handle map input with price_id and plan_id
+	if paramsMap, ok := params.(map[string]interface{}); ok {
+		priceID, _ := paramsMap["price_id"].(string)
+		planID, _ := paramsMap["plan_id"].(string)
+
+		if priceID == "" || planID == "" {
+			return nil, errors.NewError("price ID and plan ID are required").
+				WithHint("Provide map with price_id and plan_id").
+				Mark(errors.ErrValidation)
+		}
+
+		return models.QuickBooksPriceSyncWorkflowInput{
+			PriceID:       priceID,
+			PlanID:        planID,
+			TenantID:      tenantID,
+			EnvironmentID: environmentID,
+			UserID:        userID,
+		}, nil
+	}
+
+	return nil, errors.NewError("invalid input for QuickBooks price sync").
+		WithHint("Provide QuickBooksPriceSyncWorkflowInput or map with price_id and plan_id").
+		Mark(errors.ErrValidation)
 }
 
 // buildTaskProcessingInput builds input for task processing workflow
@@ -473,6 +513,29 @@ func (s *temporalService) buildHubSpotQuoteSyncInput(_ context.Context, tenantID
 
 	return nil, errors.NewError("invalid input for HubSpot quote sync workflow").
 		WithHint("Provide HubSpotQuoteSyncWorkflowInput with subscription_id").
+		Mark(errors.ErrValidation)
+}
+
+// buildCustomerOnboardingInput builds input for customer onboarding workflow
+func (s *temporalService) buildCustomerOnboardingInput(_ context.Context, tenantID, environmentID, userID string, params interface{}) (interface{}, error) {
+	// If already correct type, just ensure context is set
+	if input, ok := params.(*models.CustomerOnboardingWorkflowInput); ok {
+		input.TenantID = tenantID
+		input.EnvironmentID = environmentID
+		input.UserID = userID
+		return *input, nil
+	}
+
+	// Handle value type as well
+	if input, ok := params.(models.CustomerOnboardingWorkflowInput); ok {
+		input.TenantID = tenantID
+		input.EnvironmentID = environmentID
+		input.UserID = userID
+		return input, nil
+	}
+
+	return nil, errors.NewError("invalid input for customer onboarding workflow").
+		WithHint("Provide CustomerOnboardingWorkflowInput with customer_id and workflow_config").
 		Mark(errors.ErrValidation)
 }
 

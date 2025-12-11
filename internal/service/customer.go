@@ -10,6 +10,8 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/customer"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/interfaces"
+	workflowModels "github.com/flexprice/flexprice/internal/temporal/models"
+	temporalservice "github.com/flexprice/flexprice/internal/temporal/service"
 	"github.com/flexprice/flexprice/internal/types"
 	webhookDto "github.com/flexprice/flexprice/internal/webhook/dto"
 	"github.com/samber/lo"
@@ -187,6 +189,10 @@ func (s *customerService) CreateCustomer(ctx context.Context, req dto.CreateCust
 
 	// Publish webhook event for customer creation
 	s.publishWebhookEvent(ctx, types.WebhookEventCustomerCreated, cust.ID)
+
+	if err := s.handleCustomerOnboarding(ctx, cust); err != nil {
+		s.Logger.Errorw("failed to handle customer onboarding workflow", "customer_id", cust.ID, "error", err)
+	}
 
 	return &dto.CustomerResponse{Customer: cust}, nil
 }
@@ -496,9 +502,6 @@ func (s *customerService) UpdateCustomer(ctx context.Context, id string, req dto
 			Mark(ierr.ErrValidation)
 	}
 
-	cust.UpdatedAt = time.Now().UTC()
-	cust.UpdatedBy = types.GetUserID(ctx)
-
 	if err := s.CustomerRepo.Update(ctx, cust); err != nil {
 		// No need to wrap the error as the repository already returns properly formatted errors
 		return nil, err
@@ -704,4 +707,98 @@ func (s *customerService) GetUpcomingCreditGrantApplications(ctx context.Context
 	}
 
 	return subscriptionService.GetUpcomingCreditGrantApplications(ctx, req)
+}
+
+func (s *customerService) handleCustomerOnboarding(ctx context.Context, customer *customer.Customer) error {
+	s.Logger.Infow("handling customer onboarding", "customer_id", customer.ID)
+
+	// Get customer onboarding workflow config
+	settingsService := &settingsService{
+		ServiceParams: s.ServiceParams,
+	}
+	workflowConfig, err := GetSetting[*workflowModels.WorkflowConfig](settingsService, ctx, types.SettingKeyCustomerOnboarding)
+	if err != nil {
+		return err
+	}
+
+	if workflowConfig == nil {
+		s.Logger.Infow("workflow config is nil, skipping customer onboarding", "customer_id", customer.ID)
+		return nil
+	}
+
+	// If there are no actions, return
+	if len(workflowConfig.Actions) == 0 {
+		s.Logger.Infow("no actions found for customer onboarding", "customer_id", customer.ID)
+		return nil
+	}
+
+	// Copy necessary context values
+	tenantID := types.GetTenantID(ctx)
+	envID := types.GetEnvironmentID(ctx)
+	userID := types.GetUserID(ctx)
+
+	s.Logger.Infow("executing customer onboarding workflow",
+		"customer_id", customer.ID,
+		"tenant_id", tenantID,
+		"environment_id", envID,
+		"user_id", userID,
+		"action_count", len(workflowConfig.Actions))
+
+	// Prepare workflow input with all necessary IDs
+	input := &workflowModels.CustomerOnboardingWorkflowInput{
+		CustomerID:     customer.ID,
+		TenantID:       tenantID,
+		EnvironmentID:  envID,
+		UserID:         userID,
+		WorkflowConfig: *workflowConfig,
+	}
+
+	// Validate input
+	if err := input.Validate(); err != nil {
+		s.Logger.Errorw("invalid workflow input for customer onboarding",
+			"error", err,
+			"customer_id", customer.ID)
+		return ierr.WithError(err).
+			WithHint("Invalid workflow input for customer onboarding").
+			WithReportableDetails(map[string]interface{}{
+				"customer_id": customer.ID,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Get global temporal service
+	temporalSvc := temporalservice.GetGlobalTemporalService()
+	if temporalSvc == nil {
+		return ierr.NewError("temporal service not available").
+			WithHint("Customer onboarding workflow requires Temporal service").
+			WithReportableDetails(map[string]interface{}{
+				"customer_id": customer.ID,
+			}).
+			Mark(ierr.ErrInternal)
+	}
+
+	// Execute workflow via Temporal
+	workflowRun, err := temporalSvc.ExecuteWorkflow(
+		ctx,
+		types.TemporalCustomerOnboardingWorkflow,
+		input,
+	)
+	if err != nil {
+		s.Logger.Errorw("failed to start customer onboarding workflow",
+			"error", err,
+			"customer_id", customer.ID)
+		return ierr.WithError(err).
+			WithHint("Failed to start customer onboarding workflow").
+			WithReportableDetails(map[string]interface{}{
+				"customer_id": customer.ID,
+			}).
+			Mark(ierr.ErrInternal)
+	}
+
+	s.Logger.Infow("customer onboarding workflow started successfully",
+		"customer_id", customer.ID,
+		"workflow_id", workflowRun.GetID(),
+		"run_id", workflowRun.GetRunID())
+
+	return nil
 }
