@@ -176,7 +176,7 @@ func (s *eventService) BulkGetUsageByMeter(ctx context.Context, req []*dto.GetUs
 
 	// Get configuration values or use defaults
 	maxWorkers := 5
-	timeoutDuration := 1500 * time.Millisecond
+	timeoutDuration := 3000 * time.Millisecond
 
 	// Log the configuration being used
 	s.logger.With(
@@ -310,7 +310,17 @@ func (s *eventService) BulkGetUsageByMeter(ctx context.Context, req []*dto.GetUs
 		"total_meters", len(req),
 	).Debug("completed parallel meter usage processing")
 
-	return results, err
+	// If any goroutine failed or timed out, return an error
+	if err != nil {
+		return results, fmt.Errorf("one or more meter usage requests failed: %w", err)
+	}
+
+	// Defensive check: if failureCount > 0, return error even if p.Wait() didn't return one
+	if failureCount > 0 {
+		return results, fmt.Errorf("one or more meter usage requests failed: %d out of %d meters failed", failureCount, len(req))
+	}
+
+	return results, nil
 }
 
 // GetUsageByMeterWithFilters returns usage for a meter with specific filters on top of the meter as defined in the price
