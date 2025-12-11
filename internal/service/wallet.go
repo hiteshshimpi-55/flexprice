@@ -1539,7 +1539,7 @@ func (s *walletService) PublishEvent(ctx context.Context, eventName string, w *w
 	}
 
 	// Get real-time balance
-	balance, err := s.GetWalletBalance(ctx, w.ID)
+	balance, err := s.GetWalletBalanceV2(ctx, w.ID)
 	if err != nil {
 		s.Logger.Errorw("failed to get wallet balance for webhook",
 			"wallet_id", w.ID,
