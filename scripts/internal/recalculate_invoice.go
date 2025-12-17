@@ -7,10 +7,12 @@ import (
 	"os"
 
 	"github.com/flexprice/flexprice/internal/cache"
+	"github.com/flexprice/flexprice/internal/clickhouse"
 	"github.com/flexprice/flexprice/internal/config"
 	"github.com/flexprice/flexprice/internal/domain/invoice"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/postgres"
+	chRepo "github.com/flexprice/flexprice/internal/repository/clickhouse"
 	entRepo "github.com/flexprice/flexprice/internal/repository/ent"
 	"github.com/flexprice/flexprice/internal/sentry"
 	"github.com/flexprice/flexprice/internal/service"
@@ -119,7 +121,13 @@ func newRecalculateInvoiceScript() (*recalculateInvoiceScript, error) {
 	client := postgres.NewClient(entClient, log, sentryService)
 	cacheClient := cache.NewInMemoryCache()
 
-	// Create repositories
+	// Initialize ClickHouse client for event repositories
+	chStore, err := clickhouse.NewClickHouseStore(cfg, sentryService)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to clickhouse: %w", err)
+	}
+
+	// Create all required repositories
 	customerRepo := entRepo.NewCustomerRepository(client, log, cacheClient)
 	invoiceRepo := entRepo.NewInvoiceRepository(client, log, cacheClient)
 	subscriptionRepo := entRepo.NewSubscriptionRepository(client, log, cacheClient)
@@ -137,29 +145,55 @@ func newRecalculateInvoiceScript() (*recalculateInvoiceScript, error) {
 	taxAssociationRepo := entRepo.NewTaxAssociationRepository(client, log, cacheClient)
 	taxAppliedRepo := entRepo.NewTaxAppliedRepository(client, log, cacheClient)
 	creditNoteRepo := entRepo.NewCreditNoteRepository(client, log, cacheClient)
+	creditNoteLineItemRepo := entRepo.NewCreditNoteLineItemRepository(client, log, cacheClient)
+	tenantRepo := entRepo.NewTenantRepository(client, log, cacheClient)
+	environmentRepo := entRepo.NewEnvironmentRepository(client, log)
+	settingsRepo := entRepo.NewSettingsRepository(client, log, cacheClient)
+	couponRepo := entRepo.NewCouponRepository(client, log, cacheClient)
+	couponAssociationRepo := entRepo.NewCouponAssociationRepository(client, log, cacheClient)
+	couponApplicationRepo := entRepo.NewCouponApplicationRepository(client, log, cacheClient)
+	creditGrantRepo := entRepo.NewCreditGrantRepository(client, log, cacheClient)
+	creditGrantApplicationRepo := entRepo.NewCreditGrantApplicationRepository(client, log, cacheClient)
+	eventRepo := chRepo.NewEventRepository(chStore, log)
+	featureUsageRepo := chRepo.NewFeatureUsageRepository(chStore, log)
+	paymentRepo := entRepo.NewPaymentRepository(client, log, cacheClient)
+	alertLogsRepo := entRepo.NewAlertLogsRepository(client, log, cacheClient)
 
-	// Create service params
+	// Create service params with all required dependencies
 	serviceParams := service.ServiceParams{
-		Logger:                   log,
-		Config:                   cfg,
-		DB:                       client,
-		CustomerRepo:             customerRepo,
-		WalletRepo:               walletRepo,
-		SubRepo:                  subscriptionRepo,
-		SubscriptionLineItemRepo: subscriptionLineItemRepo,
-		SubscriptionPhaseRepo:    subscriptionPhaseRepo,
-		PlanRepo:                 planRepo,
-		PriceRepo:                priceRepo,
-		MeterRepo:                meterRepo,
-		FeatureRepo:              featureRepo,
-		EntitlementRepo:          entitlementRepo,
-		AddonRepo:                addonRepo,
-		AddonAssociationRepo:     addonAssociationRepo,
-		InvoiceRepo:              invoiceRepo,
-		TaxRateRepo:              taxRateRepo,
-		TaxAssociationRepo:       taxAssociationRepo,
-		TaxAppliedRepo:           taxAppliedRepo,
-		CreditNoteRepo:           creditNoteRepo,
+		Logger:                     log,
+		Config:                     cfg,
+		DB:                         client,
+		CustomerRepo:               customerRepo,
+		WalletRepo:                 walletRepo,
+		SubRepo:                    subscriptionRepo,
+		SubscriptionLineItemRepo:   subscriptionLineItemRepo,
+		SubscriptionPhaseRepo:      subscriptionPhaseRepo,
+		PlanRepo:                   planRepo,
+		PriceRepo:                  priceRepo,
+		MeterRepo:                  meterRepo,
+		FeatureRepo:                featureRepo,
+		EntitlementRepo:            entitlementRepo,
+		AddonRepo:                  addonRepo,
+		AddonAssociationRepo:       addonAssociationRepo,
+		InvoiceRepo:                invoiceRepo,
+		TaxRateRepo:                taxRateRepo,
+		TaxAssociationRepo:         taxAssociationRepo,
+		TaxAppliedRepo:             taxAppliedRepo,
+		CreditNoteRepo:             creditNoteRepo,
+		CreditNoteLineItemRepo:     creditNoteLineItemRepo,
+		TenantRepo:                 tenantRepo,
+		EnvironmentRepo:            environmentRepo,
+		SettingsRepo:               settingsRepo,
+		CouponRepo:                 couponRepo,
+		CouponAssociationRepo:      couponAssociationRepo,
+		CouponApplicationRepo:      couponApplicationRepo,
+		CreditGrantRepo:            creditGrantRepo,
+		CreditGrantApplicationRepo: creditGrantApplicationRepo,
+		EventRepo:                  eventRepo,
+		FeatureUsageRepo:           featureUsageRepo,
+		PaymentRepo:                paymentRepo,
+		AlertLogsRepo:              alertLogsRepo,
 	}
 
 	// Create invoice service

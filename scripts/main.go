@@ -123,6 +123,11 @@ var commands = []Command{
 		Description: "Force recalculate a finalized invoice by drafting and re-calculating it",
 		Run:         internal.RecalculateInvoice,
 	},
+	{
+		Name:        "update-wallet-balance",
+		Description: "Update wallet balances from an Excel file containing customer IDs",
+		Run:         internal.UpdateWalletBalanceFromExcel,
+	},
 }
 
 // runBulkReprocessEventsCommand wraps the bulk reprocess events with command line parameters
@@ -176,6 +181,7 @@ func main() {
 		dryRun             string
 		planID             string
 		addonID            string
+		invoiceID          string
 	)
 
 	flag.BoolVar(&listCommands, "list", false, "List all available commands")
@@ -198,6 +204,7 @@ func main() {
 	flag.StringVar(&batchSize, "batch-size", "100", "Batch size for reprocessing")
 	flag.StringVar(&dryRun, "dry-run", "false", "Dry run mode (true/false)")
 	flag.StringVar(&addonID, "addon-id", "", "Addon ID for operations")
+	flag.StringVar(&invoiceID, "invoice-id", "", "Invoice ID for operations")
 	flag.Parse()
 
 	if listCommands {
@@ -266,6 +273,9 @@ func main() {
 	}
 	if dryRun != "" {
 		os.Setenv("DRY_RUN", dryRun)
+	}
+	if invoiceID != "" {
+		os.Setenv("INVOICE_ID", invoiceID)
 	}
 
 	// Find and run the command

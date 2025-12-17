@@ -181,7 +181,7 @@ func (s *eventService) BulkGetUsageByMeter(ctx context.Context, req []*dto.GetUs
 
 	// Get configuration values or use defaults
 	maxWorkers := 5
-	timeoutDuration := 3000 * time.Millisecond
+	timeoutDuration := 5000 * time.Millisecond
 
 	// Log the configuration being used
 	s.logger.With(
