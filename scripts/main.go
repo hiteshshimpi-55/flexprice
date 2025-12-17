@@ -113,6 +113,16 @@ var commands = []Command{
 		Description: "Generate credit usage report for customers in a tenant/environment",
 		Run:         internal.GenerateCreditUsageReport,
 	},
+	{
+		Name:        "invoice-analytics-diff",
+		Description: "Compare invoice totals with analytics API totals and report discrepancies",
+		Run:         internal.RunInvoiceAnalyticsDiff,
+	},
+	{
+		Name:        "recalculate-invoice",
+		Description: "Force recalculate a finalized invoice by drafting and re-calculating it",
+		Run:         internal.RecalculateInvoice,
+	},
 }
 
 // runBulkReprocessEventsCommand wraps the bulk reprocess events with command line parameters

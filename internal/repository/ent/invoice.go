@@ -1100,3 +1100,46 @@ func (r *invoiceRepository) GetInvoicesForExport(ctx context.Context, tenantID, 
 
 	return result, nil
 }
+
+// ForceDraft forcefully sets an invoice status to draft for recalculation purposes
+// This bypasses normal version/state validation and directly updates the status
+func (r *invoiceRepository) ForceDraft(ctx context.Context, id string) error {
+	span := StartRepositorySpan(ctx, "invoice", "force_draft", map[string]interface{}{
+		"invoice_id": id,
+	})
+	defer FinishSpan(span)
+
+	r.logger.Infow("force drafting invoice", "invoice_id", id)
+
+	client := r.client.Writer(ctx)
+
+	n, err := client.Invoice.Update().
+		Where(
+			invoice.ID(id),
+			invoice.TenantID(types.GetTenantID(ctx)),
+			invoice.EnvironmentID(types.GetEnvironmentID(ctx)),
+			invoice.Status(string(types.StatusPublished)),
+		).
+		SetInvoiceStatus(string(types.InvoiceStatusDraft)).
+		SetUpdatedAt(time.Now()).
+		SetUpdatedBy(types.GetUserID(ctx)).
+		AddVersion(1).
+		Save(ctx)
+
+	if err != nil {
+		SetSpanError(span, err)
+		return ierr.WithError(err).WithHint("force draft update failed").Mark(ierr.ErrDatabase)
+	}
+	if n == 0 {
+		notFoundErr := ierr.NewError("invoice not found or already deleted").
+			WithHintf("invoice %s not found", id).
+			Mark(ierr.ErrNotFound)
+		SetSpanError(span, notFoundErr)
+		return notFoundErr
+	}
+
+	r.DeleteCache(ctx, id)
+	SetSpanSuccess(span)
+	r.logger.Infow("successfully force drafted invoice", "invoice_id", id)
+	return nil
+}

@@ -533,11 +533,11 @@ func registerRouterHandlers(
 	// Only register processing handlers when needed
 	if includeProcessingHandlers {
 		// Register handlers
-		eventConsumptionSvc.RegisterHandler(router, cfg)
-		eventConsumptionSvc.RegisterHandlerLazy(router, cfg)
-		eventPostProcessingSvc.RegisterHandler(router, cfg)
-		featureUsageSvc.RegisterHandler(router, cfg)
-		featureUsageSvc.RegisterHandlerLazy(router, cfg)
+		// eventConsumptionSvc.RegisterHandler(router, cfg)
+		// eventConsumptionSvc.RegisterHandlerLazy(router, cfg)
+		// eventPostProcessingSvc.RegisterHandler(router, cfg)
+		// featureUsageSvc.RegisterHandler(router, cfg)
+		// featureUsageSvc.RegisterHandlerLazy(router, cfg)
 		walletBalanceAlertSvc.RegisterHandler(router, cfg)
 	}
 }

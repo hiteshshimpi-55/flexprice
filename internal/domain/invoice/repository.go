@@ -39,4 +39,8 @@ type Repository interface {
 
 	// GetInvoicesForExport retrieves invoices for export purposes with pagination
 	GetInvoicesForExport(ctx context.Context, tenantID, envID string, startTime, endTime time.Time, limit, offset int) ([]*Invoice, error)
+
+	// ForceDraft forcefully sets an invoice status to draft for recalculation
+	// This bypasses normal state machine validation and should only be used for admin/script operations
+	ForceDraft(ctx context.Context, id string) error
 }

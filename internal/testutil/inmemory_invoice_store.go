@@ -275,6 +275,18 @@ func (s *InMemoryInvoiceStore) GetInvoicesForExport(ctx context.Context, tenantI
 	return result[offset:end], nil
 }
 
+// ForceDraft forcefully sets an invoice status to draft for recalculation purposes
+func (s *InMemoryInvoiceStore) ForceDraft(ctx context.Context, id string) error {
+	inv, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	inv.InvoiceStatus = types.InvoiceStatusDraft
+	inv.Version++
+	return s.InMemoryStore.Update(ctx, id, copyInvoice(inv))
+}
+
 // invoiceFilterFn implements filtering logic for invoices
 func invoiceFilterFn(ctx context.Context, inv *invoice.Invoice, filter interface{}) bool {
 	if inv == nil {
