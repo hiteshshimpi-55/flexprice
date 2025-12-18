@@ -136,9 +136,9 @@ func runBulkReprocessEventsCommand() error {
 	environmentID := os.Getenv("ENVIRONMENT_ID")
 	eventName := os.Getenv("EVENT_NAME")
 	batchSizeStr := os.Getenv("BATCH_SIZE")
-
-	if tenantID == "" || environmentID == "" {
-		return fmt.Errorf("TENANT_ID and ENVIRONMENT_ID are required")
+	externalCustomerID := os.Getenv("EXTERNAL_CUSTOMER_ID")
+	if tenantID == "" || environmentID == "" || externalCustomerID == "" {
+		return fmt.Errorf("TENANT_ID, ENVIRONMENT_ID, and EXTERNAL_CUSTOMER_ID are required")
 	}
 
 	batchSize := 100 // default
@@ -149,10 +149,11 @@ func runBulkReprocessEventsCommand() error {
 	}
 
 	params := internal.BulkReprocessEventsParams{
-		TenantID:      tenantID,
-		EnvironmentID: environmentID,
-		EventName:     eventName,
-		BatchSize:     batchSize,
+		TenantID:           tenantID,
+		EnvironmentID:      environmentID,
+		EventName:          eventName,
+		BatchSize:          batchSize,
+		ExternalCustomerID: externalCustomerID,
 	}
 
 	return internal.BulkReprocessEvents(params)

@@ -39,7 +39,7 @@ func UpdateWalletBalanceFromExcel() error {
 
 	// Default Excel file path
 	if excelFilePath == "" {
-		excelFilePath = "temp/sheets.xlsx"
+		excelFilePath = "temp/balance_sheet	.xlsx"
 	}
 
 	log.Printf("Starting wallet balance update from Excel\n")
