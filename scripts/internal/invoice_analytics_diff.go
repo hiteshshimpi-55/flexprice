@@ -73,7 +73,7 @@ func RunInvoiceAnalyticsDiff() error {
 	}
 
 	if outputFormat == "" {
-		outputFormat = "csv"
+		outputFormat = "json"
 	}
 
 	log.Printf("Starting invoice-analytics diff for tenant: %s, environment: %s\n", tenantID, environmentID)

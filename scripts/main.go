@@ -149,11 +149,10 @@ func runBulkReprocessEventsCommand() error {
 	}
 
 	params := internal.BulkReprocessEventsParams{
-		TenantID:           tenantID,
-		EnvironmentID:      environmentID,
-		EventName:          eventName,
-		BatchSize:          batchSize,
-		ExternalCustomerID: externalCustomerID,
+		TenantID:      tenantID,
+		EnvironmentID: environmentID,
+		EventName:     eventName,
+		BatchSize:     batchSize,
 	}
 
 	return internal.BulkReprocessEvents(params)
