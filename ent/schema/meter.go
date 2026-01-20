@@ -2,6 +2,7 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
 	baseMixin "github.com/flexprice/flexprice/ent/schema/mixin"
@@ -60,6 +61,10 @@ func (Meter) Fields() []ent.Field {
 func (Meter) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("tenant_id", "environment_id"),
+		// Index for active meters lookup by event_name with created_at ordering
+		index.Fields("tenant_id", "environment_id", "event_name", "created_at").
+			StorageKey("idx_meters_active").
+			Annotations(entsql.IndexWhere("status NOT IN ('deleted', 'archived')")),
 	}
 }
 
