@@ -554,7 +554,7 @@ func registerRouterHandlers(
 		featureUsageSvc.RegisterHandlerLazy(router, cfg)
 		costSheetUsageSvc.RegisterHandler(router, cfg)
 		costSheetUsageSvc.RegisterHandlerLazy(router, cfg)
-		walletBalanceAlertSvc.RegisterHandler(router, cfg)
+		// walletBalanceAlertSvc.RegisterHandler(router, cfg)
 	}
 }
 
