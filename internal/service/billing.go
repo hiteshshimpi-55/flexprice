@@ -278,6 +278,8 @@ func (s *billingService) CalculateUsageCharges(
 		// Process each matching charge individually (normal and overage charges)
 		for _, matchingCharge := range matchingCharges {
 			quantityForCalculation := decimal.NewFromFloat(matchingCharge.Quantity)
+			// Track usage metadata for group breakdown visibility
+			var usageMetadata map[string]string
 			matchingEntitlement, ok := entitlementsByMeterID[item.MeterID]
 
 			// Only apply entitlement adjustments if:
@@ -456,6 +458,9 @@ func (s *billingService) CalculateUsageCharges(
 								return nil, decimal.Zero, err
 							}
 
+							// Capture group breakdown metadata for invoice line item
+							usageMetadata = usageResult.Metadata
+
 							// Extract bucket values
 							bucketedValues := make([]decimal.Decimal, len(usageResult.Results))
 							for i, result := range usageResult.Results {
@@ -615,6 +620,11 @@ func (s *billingService) CalculateUsageCharges(
 			// Create metadata for the line item, including overage information if applicable
 			metadata := types.Metadata{
 				"description": fmt.Sprintf("%s (Usage Charge)", item.DisplayName),
+			}
+
+			// Merge group breakdown metadata from usage result if available
+			for k, v := range usageMetadata {
+				metadata[k] = v
 			}
 
 			displayName := lo.ToPtr(item.DisplayName)
@@ -856,6 +866,8 @@ func (s *billingService) CalculateFeatureUsageCharges(
 		// Process each matching charge individually (normal and overage charges)
 		for _, matchingCharge := range matchingCharges {
 			quantityForCalculation := decimal.NewFromFloat(matchingCharge.Quantity)
+			// Track usage metadata for group breakdown visibility
+			var usageMetadata map[string]string
 			matchingEntitlement, entitlementOk := entitlementsByMeterID[item.MeterID]
 
 			// Handle bucketed max meters first - this should always be checked regardless of entitlements
@@ -881,6 +893,9 @@ func (s *billingService) CalculateFeatureUsageCharges(
 				if err != nil {
 					return nil, decimal.Zero, err
 				}
+
+				// Capture group breakdown metadata for invoice line item
+				usageMetadata = usageResult.Metadata
 
 				// Extract bucket values
 				bucketedValues := make([]decimal.Decimal, len(usageResult.Results))
@@ -1190,6 +1205,11 @@ func (s *billingService) CalculateFeatureUsageCharges(
 			// Create metadata for the line item, including overage information if applicable
 			metadata := types.Metadata{
 				"description": fmt.Sprintf("%s (Usage Charge)", item.DisplayName),
+			}
+
+			// Merge group breakdown metadata from usage result if available
+			for k, v := range usageMetadata {
+				metadata[k] = v
 			}
 
 			displayName := lo.ToPtr(item.DisplayName)

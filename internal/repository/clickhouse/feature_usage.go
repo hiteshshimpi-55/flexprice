@@ -2209,8 +2209,122 @@ func (r *FeatureUsageRepository) GetUsageForMaxMetersWithBuckets(ctx context.Con
 		})
 	}
 
+	// If GroupByProperty is set, run a secondary query to get per-group totals
+	// for calculation visibility in invoice metadata
+	if params.UsageParams.GroupByProperty != "" {
+		groupBreakdown, err := r.getGroupBreakdownForFeatureUsage(ctx, params)
+		if err != nil {
+			log.Printf("Warning: failed to get group breakdown: %v", err)
+		} else if len(groupBreakdown) > 0 {
+			if result.Metadata == nil {
+				result.Metadata = make(map[string]string)
+			}
+			result.Metadata["calculation_method"] = "max_per_group_summed"
+			result.Metadata["group_by_property"] = params.UsageParams.GroupByProperty
+			for groupKey, groupTotal := range groupBreakdown {
+				result.Metadata["group_breakdown_"+groupKey] = groupTotal.String()
+			}
+		}
+	}
+
 	SetSpanSuccess(span)
 	return &result, nil
+}
+
+// getGroupBreakdownForFeatureUsage runs a secondary query to get per-group totals
+// for calculation visibility in invoice metadata.
+func (r *FeatureUsageRepository) getGroupBreakdownForFeatureUsage(ctx context.Context, params *events.FeatureUsageParams) (map[string]decimal.Decimal, error) {
+	bucketWindow := r.formatWindowSize(params.UsageParams.WindowSize, params.UsageParams.BillingAnchor)
+
+	externalCustomerFilter := ""
+	if params.UsageParams.ExternalCustomerID != "" {
+		externalCustomerFilter = fmt.Sprintf("AND external_customer_id = '%s'", params.ExternalCustomerID)
+	}
+
+	featureFilter := ""
+	if params.FeatureID != "" {
+		featureFilter = fmt.Sprintf("AND feature_id = '%s'", params.FeatureID)
+	}
+
+	priceFilter := ""
+	if params.PriceID != "" {
+		priceFilter = fmt.Sprintf("AND price_id = '%s'", params.PriceID)
+	}
+
+	meterFilter := ""
+	if params.MeterID != "" {
+		meterFilter = fmt.Sprintf("AND meter_id = '%s'", params.MeterID)
+	}
+
+	subLineItemFilter := ""
+	if params.SubLineItemID != "" {
+		subLineItemFilter = fmt.Sprintf("AND sub_line_item_id = '%s'", params.SubLineItemID)
+	}
+
+	filterConditions := buildFilterConditions(params.Filters)
+	timeConditions := buildTimeConditions(params.UsageParams)
+
+	// Determine aggregation function based on type
+	aggFunc := "max"
+	if params.UsageParams.AggregationType == types.AggregationSum {
+		aggFunc = "sum"
+	}
+
+	groupByExpr := fmt.Sprintf("JSONExtractString(properties, '%s')", params.UsageParams.GroupByProperty)
+
+	query := fmt.Sprintf(`
+		WITH per_group AS (
+			SELECT
+				%s as bucket_start,
+				%s as group_key,
+				%s(qty_total) as group_value
+			FROM feature_usage
+			PREWHERE tenant_id = '%s'
+				AND environment_id = '%s'
+				%s
+				%s
+				%s
+				%s
+				%s
+				%s
+				%s
+			GROUP BY bucket_start, group_key
+		)
+		SELECT group_key, sum(group_value) as total
+		FROM per_group
+		GROUP BY group_key
+		ORDER BY total DESC
+	`,
+		bucketWindow,
+		groupByExpr,
+		aggFunc,
+		types.GetTenantID(ctx),
+		types.GetEnvironmentID(ctx),
+		externalCustomerFilter,
+		featureFilter,
+		priceFilter,
+		meterFilter,
+		subLineItemFilter,
+		filterConditions,
+		timeConditions)
+
+	rows, err := r.store.GetConn().Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	breakdown := make(map[string]decimal.Decimal)
+	for rows.Next() {
+		var groupKey string
+		var total decimal.Decimal
+		if err := rows.Scan(&groupKey, &total); err != nil {
+			return nil, err
+		}
+		breakdown[groupKey] = total
+	}
+
+	return breakdown, nil
 }
 
 func (r *FeatureUsageRepository) getWindowedQuery(ctx context.Context, params *events.FeatureUsageParams) string {

@@ -398,9 +398,98 @@ func (r *EventRepository) GetUsage(ctx context.Context, params *events.UsagePara
 			}
 		}
 	}
+	// If GroupByProperty is set with bucketed MAX, run a secondary query to get per-group totals
+	// for calculation visibility in invoice metadata
+	if params.GroupByProperty != "" && params.BucketSize != "" && params.AggregationType == types.AggregationMax {
+		groupBreakdown, err := r.getGroupBreakdown(ctx, params)
+		if err != nil {
+			// Log but don't fail the main query - this is supplementary data
+			log.Printf("Warning: failed to get group breakdown: %v", err)
+		} else if len(groupBreakdown) > 0 {
+			if result.Metadata == nil {
+				result.Metadata = make(map[string]string)
+			}
+			result.Metadata["calculation_method"] = "max_per_group_summed"
+			result.Metadata["group_by_property"] = params.GroupByProperty
+			for groupKey, groupTotal := range groupBreakdown {
+				result.Metadata["group_breakdown_"+groupKey] = groupTotal.String()
+			}
+		}
+	}
 
 	SetSpanSuccess(span)
 	return &result, nil
+}
+
+// getGroupBreakdown runs a secondary query to get per-group totals for MAX aggregation
+// with GroupByProperty. This is used to provide calculation visibility in invoice metadata.
+func (r *EventRepository) getGroupBreakdown(ctx context.Context, params *events.UsageParams) (map[string]decimal.Decimal, error) {
+	bucketWindow := formatWindowSizeWithBillingAnchor(params.BucketSize, params.BillingAnchor)
+
+	externalCustomerFilter := ""
+	if params.ExternalCustomerID != "" {
+		externalCustomerFilter = fmt.Sprintf("AND external_customer_id = '%s'", params.ExternalCustomerID)
+	}
+
+	customerFilter := ""
+	if params.CustomerID != "" {
+		customerFilter = fmt.Sprintf("AND customer_id = '%s'", params.CustomerID)
+	}
+
+	filterConditions := buildFilterConditions(params.Filters)
+	timeConditions := buildTimeConditions(params)
+
+	groupByExpr := fmt.Sprintf("JSONExtractString(assumeNotNull(properties), '%s')", params.GroupByProperty)
+
+	query := fmt.Sprintf(`
+		WITH per_group AS (
+			SELECT
+				%s as bucket_start,
+				%s as group_key,
+				max(JSONExtractFloat(assumeNotNull(properties), '%s')) as group_value
+			FROM events FINAL
+			PREWHERE tenant_id = '%s'
+				AND environment_id = '%s'
+				AND event_name = '%s'
+				%s
+				%s
+				%s
+				%s
+			GROUP BY bucket_start, group_key
+		)
+		SELECT group_key, sum(group_value) as total
+		FROM per_group
+		GROUP BY group_key
+		ORDER BY total DESC
+	`,
+		bucketWindow,
+		groupByExpr,
+		params.PropertyName,
+		types.GetTenantID(ctx),
+		types.GetEnvironmentID(ctx),
+		params.EventName,
+		externalCustomerFilter,
+		customerFilter,
+		filterConditions,
+		timeConditions)
+
+	rows, err := r.store.GetConn().Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	breakdown := make(map[string]decimal.Decimal)
+	for rows.Next() {
+		var groupKey string
+		var total float64
+		if err := rows.Scan(&groupKey, &total); err != nil {
+			return nil, err
+		}
+		breakdown[groupKey] = safeDecimalFromFloat(total)
+	}
+
+	return breakdown, nil
 }
 
 func (r *EventRepository) GetUsageWithFilters(ctx context.Context, params *events.UsageWithFiltersParams) ([]*events.AggregationResult, error) {
