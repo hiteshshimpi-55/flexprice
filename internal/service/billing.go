@@ -1657,7 +1657,7 @@ func (s *billingService) PrepareSubscriptionInvoiceRequest(
 		// but don't filter out already invoiced items
 
 		// For current period arrear charges
-		arrearResult, err := s.calculateFeatureUsageCharges(
+		arrearResult, err := s.CalculateCharges(
 			ctx,
 			sub,
 			classification.CurrentPeriodArrear,
@@ -1670,7 +1670,7 @@ func (s *billingService) PrepareSubscriptionInvoiceRequest(
 		}
 
 		// For next period advance charges
-		advanceResult, err := s.calculateFeatureUsageCharges(
+		advanceResult, err := s.CalculateCharges(
 			ctx,
 			sub,
 			classification.NextPeriodAdvance,
