@@ -16,6 +16,7 @@ import (
 	"github.com/flexprice/flexprice/internal/config"
 	"github.com/flexprice/flexprice/internal/domain/customer"
 	"github.com/flexprice/flexprice/internal/domain/invoice"
+	domainSub "github.com/flexprice/flexprice/internal/domain/subscription"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/postgres"
 	chRepo "github.com/flexprice/flexprice/internal/repository/clickhouse"
@@ -23,62 +24,55 @@ import (
 	"github.com/flexprice/flexprice/internal/sentry"
 	"github.com/flexprice/flexprice/internal/service"
 	"github.com/flexprice/flexprice/internal/types"
-	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
 )
 
-const (
-	dateLayout                   = "2006-01-02"
-	defaultReconciliationWorkers = 10
-	envReconciliationWorkers     = "RECONCILIATION_WORKERS"
-)
-
-// AnalyticsInvoiceDiffRow represents one row in the reconciliation diff CSV
-type AnalyticsInvoiceDiffRow struct {
-	CustomerID         string
-	CustomerName       string
-	ExternalCustomerID string
-	AnalyticsTotalCost string
-	InvoiceSubtotalSum string
-	Diff               string
-	InvoiceIDs         string
-	InvoiceCount       int
-	Currency           string
+// reconciliationRow represents a single row in the output CSV
+type reconciliationRow struct {
+	CustomerID       string
+	SubscriptionID   string
+	InvoiceID        string
+	PeriodStart      string
+	PeriodEnd        string
+	AnalyticsAmount  string
+	InvoiceSubtotal  string
+	Diff             string
+	InvoiceGenerated string
 }
 
-type analyticsInvoiceReconciliationScript struct {
+// reconciliationScript holds the dependencies for the reconciliation script
+type reconciliationScript struct {
 	log                         *logger.Logger
-	customerRepo                customer.Repository
+	subRepo                     domainSub.Repository
 	invoiceRepo                 invoice.Repository
+	customerRepo                customer.Repository
 	featureUsageTrackingService service.FeatureUsageTrackingService
 }
 
-// RunAnalyticsInvoiceReconciliation compares analytics total cost to invoice subtotals for a period and writes diffs to CSV.
-// Period is hardcoded to 1 Feb – 1 Mar. Requires TENANT_ID and ENVIRONMENT_ID.
-// Infrastructure (Postgres, ClickHouse, Kafka) must be running.
-//
-// Invoice side uses stored subtotals only: values come from invoiceRepo.List() (inv.Subtotal).
-// Recalculated totals from GetInvoiceWithBreakdown()/recalculateInvoiceTotals() are not used,
-// so the report may show divergence where DB-stored subtotals differ from in-memory recalculated totals.
+// RunAnalyticsInvoiceReconciliation is the entry point for the reconciliation script.
+// It fetches all subscriptions for a tenant+environment, computes the 2 periods
+// before the current period, fetches analytics costs (via GetDetailedUsageAnalytics)
+// and invoices for those periods, compares them, and writes the results to a CSV file.
 func RunAnalyticsInvoiceReconciliation() error {
 	tenantID := os.Getenv("TENANT_ID")
 	environmentID := os.Getenv("ENVIRONMENT_ID")
+	workerCountStr := os.Getenv("WORKER_COUNT")
 
 	if tenantID == "" || environmentID == "" {
 		return fmt.Errorf("TENANT_ID and ENVIRONMENT_ID are required")
 	}
 
-	startTime := time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC)
-	endTime := time.Date(2025, time.March, 1, 0, 0, 0, 0, time.UTC)
+	workerCount := 5
+	if workerCountStr != "" {
+		if n, err := strconv.Atoi(workerCountStr); err == nil && n > 0 {
+			workerCount = n
+		}
+	}
 
-	// End of period for invoice filter: period_end in [start, end]
-	periodEndGTE := startTime
-	periodEndLTE := endTime
+	log.Printf("Starting analytics-invoice reconciliation for tenant=%s env=%s workers=%d\n",
+		tenantID, environmentID, workerCount)
 
-	log.Printf("Reconciling analytics vs invoices for period %s to %s (tenant=%s, env=%s)",
-		startTime.Format(dateLayout), endTime.Format(dateLayout), tenantID, environmentID)
-
-	script, err := newAnalyticsInvoiceReconciliationScript()
+	script, err := newReconciliationScript()
 	if err != nil {
 		return fmt.Errorf("failed to initialize script: %w", err)
 	}
@@ -87,275 +81,378 @@ func RunAnalyticsInvoiceReconciliation() error {
 	ctx = context.WithValue(ctx, types.CtxTenantID, tenantID)
 	ctx = context.WithValue(ctx, types.CtxEnvironmentID, environmentID)
 
-	// 1) List all customers (published)
-	customerFilter := types.NewNoLimitCustomerFilter()
-	customerFilter.QueryFilter.Status = lo.ToPtr(types.StatusPublished)
-	customers, err := script.customerRepo.ListAll(ctx, customerFilter)
+	// Fetch all active + cancelled subscriptions (no pagination limit)
+	subFilter := types.NewNoLimitSubscriptionFilter()
+	subFilter.SubscriptionStatus = []types.SubscriptionStatus{
+		types.SubscriptionStatusActive,
+		types.SubscriptionStatusCancelled,
+	}
+
+	subs, err := script.subRepo.ListAll(ctx, subFilter)
 	if err != nil {
-		return fmt.Errorf("list customers: %w", err)
+		return fmt.Errorf("failed to list subscriptions: %w", err)
 	}
 
-	log.Printf("Found %d customers", len(customers))
+	log.Printf("Found %d subscriptions to process\n", len(subs))
 
-	// Build list of customers to process (same tenant/env, with external_customer_id)
-	var toProcess []*customer.Customer
-	for _, c := range customers {
-		if c.TenantID != tenantID || c.EnvironmentID != environmentID {
-			continue
+	// Batch-fetch all customers to build CustomerID -> ExternalID map
+	customerIDs := make([]string, 0, len(subs))
+	seen := make(map[string]bool)
+	for _, sub := range subs {
+		if !seen[sub.CustomerID] {
+			customerIDs = append(customerIDs, sub.CustomerID)
+			seen[sub.CustomerID] = true
 		}
-		if c.ExternalID == "" {
-			continue
-		}
-		toProcess = append(toProcess, c)
 	}
-	workers := getReconciliationWorkers()
-	log.Printf("Processing %d customers with %d parallel workers, appending diff rows to CSV as each completes", len(toProcess), workers)
 
-	// 2) List invoices in period (period_end in range), sum subtotal by customer (needed before we iterate customers)
-	invFilter := types.NewNoLimitInvoiceFilter()
-	invFilter.PeriodEndGTE = &periodEndGTE
-	invFilter.PeriodEndLTE = &periodEndLTE
-	invFilter.InvoiceStatus = []types.InvoiceStatus{types.InvoiceStatusDraft, types.InvoiceStatusFinalized}
-	invFilter.SkipLineItems = true
-
-	invoices, err := script.invoiceRepo.List(ctx, invFilter)
+	customerMap, err := script.buildCustomerMap(ctx, customerIDs)
 	if err != nil {
-		return fmt.Errorf("list invoices: %w", err)
+		return fmt.Errorf("failed to fetch customers: %w", err)
 	}
+	log.Printf("Fetched %d unique customers\n", len(customerMap))
 
-	// Sum stored subtotals by customer (DB values only; not recalculated via GetInvoiceWithBreakdown/recalculateInvoiceTotals)
-	storedInvoiceSubtotalByCustomer := make(map[string]decimal.Decimal)
-	invoiceIDsByCustomer := make(map[string][]string)
-	for _, inv := range invoices {
-		if inv.TenantID != tenantID || inv.EnvironmentID != environmentID {
-			continue
-		}
-		storedInvoiceSubtotalByCustomer[inv.CustomerID] = storedInvoiceSubtotalByCustomer[inv.CustomerID].Add(inv.Subtotal)
-		invoiceIDsByCustomer[inv.CustomerID] = append(invoiceIDsByCustomer[inv.CustomerID], inv.ID)
-	}
-	log.Printf("Summed stored invoice subtotals for %d invoices (DB-stored values only; not runtime-recalculated)", len(invoices))
-
-	// 3) Open CSV and run N workers: each result appends a row if diff exceeds tolerance
-	outputFile := fmt.Sprintf("analytics_invoice_reconciliation_%s_%s.csv", tenantID, time.Now().Format("20060102_150405"))
-	csvFile, err := os.Create(outputFile)
-	if err != nil {
-		return fmt.Errorf("create CSV: %w", err)
-	}
-	defer csvFile.Close()
-	csvWriter := csv.NewWriter(csvFile)
-	header := []string{
-		"customer_id", "customer_name", "external_customer_id",
-		"analytics_total_cost", "invoice_subtotal_sum", "diff",
-		"invoice_ids", "invoice_count", "currency",
-	}
-	if err := csvWriter.Write(header); err != nil {
-		return fmt.Errorf("write CSV header: %w", err)
-	}
-	csvWriter.Flush()
-	if err := csvWriter.Error(); err != nil {
-		return fmt.Errorf("flush CSV header: %w", err)
-	}
-
-	tolerance := decimal.NewFromFloat(0.0001)
-	rowsWritten, completed := runReconciliationWorkers(
-		ctx, script, toProcess, startTime, endTime, workers,
-		storedInvoiceSubtotalByCustomer, invoiceIDsByCustomer,
-		tolerance, csvWriter,
+	// Process subscriptions concurrently
+	var (
+		mu        sync.Mutex
+		allRows   []reconciliationRow
+		wg        sync.WaitGroup
+		semaphore = make(chan struct{}, workerCount)
 	)
-	csvWriter.Flush()
-	if err := csvWriter.Error(); err != nil {
-		return fmt.Errorf("flush CSV: %w", err)
+
+	for i, sub := range subs {
+		if i%50 == 0 {
+			log.Printf("Queued %d/%d subscriptions for processing\n", i, len(subs))
+		}
+
+		wg.Add(1)
+		semaphore <- struct{}{} // acquire
+
+		go func(sub *domainSub.Subscription) {
+			defer wg.Done()
+			defer func() { <-semaphore }() // release
+
+			rows := script.processSubscription(ctx, sub, customerMap)
+			if len(rows) > 0 {
+				mu.Lock()
+				allRows = append(allRows, rows...)
+				mu.Unlock()
+			}
+		}(sub)
 	}
-	if rowsWritten == 0 {
-		log.Printf("No differences found; wrote CSV with header only to %s (completed %d/%d customers)", outputFile, completed, len(toProcess))
-	} else {
-		log.Printf("Wrote %d diff rows to %s (completed %d/%d customers)", rowsWritten, outputFile, completed, len(toProcess))
+
+	wg.Wait()
+
+	log.Printf("Processed all %d subscriptions, total rows: %d\n", len(subs), len(allRows))
+
+	// Write CSV
+	outputFile := fmt.Sprintf("reconciliation_%s_%s.csv", tenantID, time.Now().Format("20060102_150405"))
+	if err := writeReconciliationCSV(allRows, outputFile); err != nil {
+		return fmt.Errorf("failed to write CSV: %w", err)
 	}
+
+	log.Printf("Reconciliation report generated: %s\n", outputFile)
 	return nil
 }
 
-func getReconciliationWorkers() int {
-	s := os.Getenv(envReconciliationWorkers)
-	if s == "" {
-		return defaultReconciliationWorkers
-	}
-	n, err := strconv.Atoi(s)
-	if err != nil || n < 1 {
-		return defaultReconciliationWorkers
-	}
-	return n
-}
+// buildCustomerMap fetches customers by IDs and returns a map of CustomerID -> ExternalID.
+func (s *reconciliationScript) buildCustomerMap(ctx context.Context, customerIDs []string) (map[string]string, error) {
+	result := make(map[string]string, len(customerIDs))
 
-type analyticsResult struct {
-	customer  *customer.Customer
-	totalCost decimal.Decimal
-	err       error
-}
+	// Fetch customers in batches of 100
+	batchSize := 100
+	for i := 0; i < len(customerIDs); i += batchSize {
+		end := i + batchSize
+		if end > len(customerIDs) {
+			end = len(customerIDs)
+		}
+		batch := customerIDs[i:end]
 
-// runReconciliationWorkers runs GetDetailedUsageAnalytics with a worker pool; as each result
-// arrives, if the diff exceeds tolerance a row is appended to the CSV. Returns rowsWritten and completed count.
-func runReconciliationWorkers(
-	ctx context.Context,
-	script *analyticsInvoiceReconciliationScript,
-	customers []*customer.Customer,
-	startTime, endTime time.Time,
-	workers int,
-	storedInvoiceSubtotalByCustomer map[string]decimal.Decimal,
-	invoiceIDsByCustomer map[string][]string,
-	tolerance decimal.Decimal,
-	csvWriter *csv.Writer,
-) (rowsWritten, completed int) {
-	if len(customers) == 0 {
-		return 0, 0
-	}
-	if workers > len(customers) {
-		workers = len(customers)
-	}
+		filter := types.NewNoLimitCustomerFilter()
+		filter.CustomerIDs = batch
 
-	jobCh := make(chan *customer.Customer, len(customers))
-	resultCh := make(chan analyticsResult, workers*2)
+		customers, err := s.customerRepo.List(ctx, filter)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list customers (batch %d-%d): %w", i, end, err)
+		}
 
-	var wg sync.WaitGroup
-	for w := 0; w < workers; w++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for c := range jobCh {
-				req := &dto.GetUsageAnalyticsRequest{
-					ExternalCustomerID: c.ExternalID,
-					StartTime:          startTime,
-					EndTime:            endTime,
-				}
-				resp, err := script.featureUsageTrackingService.GetDetailedUsageAnalytics(ctx, req)
-				if err != nil {
-					resultCh <- analyticsResult{customer: c, err: err}
-					continue
-				}
-				resultCh <- analyticsResult{customer: c, totalCost: resp.TotalCost}
-			}
-		}()
-	}
-
-	go func() {
 		for _, c := range customers {
-			jobCh <- c
-		}
-		close(jobCh)
-		wg.Wait()
-		close(resultCh)
-	}()
-
-	for r := range resultCh {
-		completed++
-		if r.err != nil {
-			log.Printf("Warning: analytics for customer %s: %v", r.customer.ID, r.err)
-			if completed%100 == 0 || completed == len(customers) {
-				log.Printf("Progress: %d/%d customers (%d diff rows so far)", completed, len(customers), rowsWritten)
-			}
-			continue
-		}
-		c := r.customer
-		analyticsCost := r.totalCost
-		storedSubtotal := storedInvoiceSubtotalByCustomer[c.ID]
-		diff := analyticsCost.Sub(storedSubtotal)
-		if diff.Abs().LessThanOrEqual(tolerance) {
-			if completed%100 == 0 || completed == len(customers) {
-				log.Printf("Progress: %d/%d customers (%d diff rows so far)", completed, len(customers), rowsWritten)
-			}
-			continue
-		}
-		customerName := c.Name
-		if customerName == "" {
-			customerName = c.ExternalID
-		}
-		if customerName == "" {
-			customerName = c.ID
-		}
-		ids := invoiceIDsByCustomer[c.ID]
-		idList := ""
-		for _, id := range ids {
-			if idList != "" {
-				idList += ";"
-			}
-			idList += id
-		}
-		record := []string{
-			c.ID, customerName, c.ExternalID,
-			analyticsCost.StringFixed(4), storedSubtotal.StringFixed(4), diff.StringFixed(4),
-			idList, fmt.Sprintf("%d", len(ids)), "USD",
-		}
-		if err := csvWriter.Write(record); err != nil {
-			log.Printf("Error writing CSV row for customer %s: %v", c.ID, err)
-			continue
-		}
-		rowsWritten++
-		if rowsWritten%50 == 0 {
-			csvWriter.Flush()
-		}
-		if completed%100 == 0 || completed == len(customers) {
-			log.Printf("Progress: %d/%d customers (%d diff rows so far)", completed, len(customers), rowsWritten)
+			result[c.ID] = c.ExternalID
 		}
 	}
-	return rowsWritten, completed
+
+	return result, nil
 }
 
-func newAnalyticsInvoiceReconciliationScript() (*analyticsInvoiceReconciliationScript, error) {
+// processSubscription computes the last 2 periods (before the current period) for a
+// subscription and reconciles analytics vs invoice for each.
+func (s *reconciliationScript) processSubscription(ctx context.Context, sub *domainSub.Subscription, customerMap map[string]string) []reconciliationRow {
+	periods := s.computePreviousPeriods(sub, 2)
+	if len(periods) == 0 {
+		return nil
+	}
+
+	externalCustomerID, ok := customerMap[sub.CustomerID]
+	if !ok || externalCustomerID == "" {
+		s.log.Warnw("customer external ID not found, skipping subscription",
+			"subscription_id", sub.ID,
+			"customer_id", sub.CustomerID)
+		return nil
+	}
+
+	var rows []reconciliationRow
+	for _, period := range periods {
+		row := s.reconcilePeriod(ctx, sub, period, externalCustomerID)
+		rows = append(rows, row)
+	}
+
+	return rows
+}
+
+// period represents a billing period [Start, End)
+type period struct {
+	Start time.Time
+	End   time.Time
+}
+
+// computePreviousPeriods computes N periods before the current period by walking
+// backwards from CurrentPeriodStart using BillingAnchor and BillingPeriod.
+func (s *reconciliationScript) computePreviousPeriods(sub *domainSub.Subscription, count int) []period {
+	periods := make([]period, 0, count)
+
+	// The end of the previous period is the start of the current period
+	prevEnd := sub.CurrentPeriodStart
+
+	for i := 0; i < count; i++ {
+		// Calculate previous period start by going backwards one billing interval
+		prevStart, err := types.PreviousBillingDate(prevEnd, 1, sub.BillingPeriod)
+		if err != nil {
+			s.log.Warnw("failed to compute previous billing date",
+				"subscription_id", sub.ID,
+				"prev_end", prevEnd,
+				"billing_period", sub.BillingPeriod,
+				"error", err)
+			break
+		}
+
+		// Don't go before subscription start date
+		if prevStart.Before(sub.StartDate) {
+			if prevEnd.After(sub.StartDate) {
+				prevStart = sub.StartDate
+			} else {
+				break
+			}
+		}
+
+		periods = append(periods, period{Start: prevStart, End: prevEnd})
+		prevEnd = prevStart
+	}
+
+	return periods
+}
+
+// reconcilePeriod fetches analytics cost and invoice for a single period and returns a CSV row.
+func (s *reconciliationScript) reconcilePeriod(ctx context.Context, sub *domainSub.Subscription, p period, externalCustomerID string) reconciliationRow {
+	row := reconciliationRow{
+		CustomerID:     sub.CustomerID,
+		SubscriptionID: sub.ID,
+		PeriodStart:    p.Start.UTC().Format(time.RFC3339),
+		PeriodEnd:      p.End.UTC().Format(time.RFC3339),
+	}
+
+	// 1. Get analytics cost via featureUsageTrackingService.GetDetailedUsageAnalytics
+	analyticsAmount := decimal.Zero
+	analyticsResp, err := s.featureUsageTrackingService.GetDetailedUsageAnalytics(ctx, &dto.GetUsageAnalyticsRequest{
+		ExternalCustomerID: externalCustomerID,
+		StartTime:          p.Start,
+		EndTime:            p.End,
+	})
+	if err != nil {
+		s.log.Warnw("failed to get detailed usage analytics",
+			"subscription_id", sub.ID,
+			"customer_id", sub.CustomerID,
+			"external_customer_id", externalCustomerID,
+			"period_start", p.Start,
+			"period_end", p.End,
+			"error", err)
+	} else if analyticsResp != nil {
+		analyticsAmount = analyticsResp.TotalCost
+	}
+	row.AnalyticsAmount = analyticsAmount.StringFixed(2)
+
+	// 2. Find matching invoice for this subscription + period
+	inv := s.findInvoiceForPeriod(ctx, sub.ID, p)
+	if inv != nil {
+		row.InvoiceID = inv.ID
+		row.InvoiceSubtotal = inv.Subtotal.StringFixed(2)
+		row.InvoiceGenerated = "true"
+
+		diff := analyticsAmount.Sub(inv.Subtotal)
+		row.Diff = diff.StringFixed(2)
+	} else {
+		row.InvoiceID = ""
+		row.InvoiceSubtotal = ""
+		row.InvoiceGenerated = "false"
+		row.Diff = analyticsAmount.StringFixed(2)
+	}
+
+	return row
+}
+
+// findInvoiceForPeriod queries for a subscription invoice matching the given period.
+func (s *reconciliationScript) findInvoiceForPeriod(ctx context.Context, subscriptionID string, p period) *invoice.Invoice {
+	filter := types.NewNoLimitInvoiceFilter()
+	filter.SubscriptionID = subscriptionID
+	filter.InvoiceType = types.InvoiceTypeSubscription
+	filter.InvoiceStatus = []types.InvoiceStatus{
+		types.InvoiceStatusDraft,
+		types.InvoiceStatusFinalized,
+	}
+
+	// Match period start within a small tolerance window (±1 minute)
+	tolerance := 1 * time.Minute
+	periodStartGTE := p.Start.Add(-tolerance)
+	periodStartLTE := p.Start.Add(tolerance)
+	filter.PeriodStartGTE = &periodStartGTE
+	filter.PeriodStartLTE = &periodStartLTE
+
+	filter.SkipLineItems = true
+
+	invoices, err := s.invoiceRepo.List(ctx, filter)
+	if err != nil {
+		s.log.Warnw("failed to list invoices for period",
+			"subscription_id", subscriptionID,
+			"period_start", p.Start,
+			"period_end", p.End,
+			"error", err)
+		return nil
+	}
+
+	if len(invoices) == 0 {
+		return nil
+	}
+
+	return invoices[0]
+}
+
+// writeReconciliationCSV writes the reconciliation rows to a CSV file.
+func writeReconciliationCSV(rows []reconciliationRow, filename string) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("failed to create CSV file: %w", err)
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	header := []string{
+		"customer_id",
+		"subscription_id",
+		"invoice_id",
+		"period_start",
+		"period_end",
+		"analytics_amount",
+		"invoice_subtotal",
+		"diff",
+		"invoice_generated",
+	}
+	if err := writer.Write(header); err != nil {
+		return fmt.Errorf("failed to write CSV header: %w", err)
+	}
+
+	for _, row := range rows {
+		record := []string{
+			row.CustomerID,
+			row.SubscriptionID,
+			row.InvoiceID,
+			row.PeriodStart,
+			row.PeriodEnd,
+			row.AnalyticsAmount,
+			row.InvoiceSubtotal,
+			row.Diff,
+			row.InvoiceGenerated,
+		}
+		if err := writer.Write(record); err != nil {
+			return fmt.Errorf("failed to write CSV record: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// newReconciliationScript initialises all dependencies needed by the reconciliation script.
+func newReconciliationScript() (*reconciliationScript, error) {
 	cfg, err := config.NewConfig()
 	if err != nil {
-		return nil, fmt.Errorf("config: %w", err)
+		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
-	logger, err := logger.NewLogger(cfg)
+
+	l, err := logger.NewLogger(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("logger: %w", err)
+		return nil, fmt.Errorf("failed to create logger: %w", err)
 	}
-	sentrySvc := sentry.NewSentryService(cfg, logger)
-	chStore, err := clickhouse.NewClickHouseStore(cfg, sentrySvc)
+
+	sentryService := sentry.NewSentryService(cfg, l)
+
+	chStore, err := clickhouse.NewClickHouseStore(cfg, sentryService)
 	if err != nil {
-		return nil, fmt.Errorf("clickhouse: %w", err)
+		return nil, fmt.Errorf("failed to connect to clickhouse: %w", err)
 	}
-	entClient, err := postgres.NewEntClients(cfg, logger)
+
+	entClient, err := postgres.NewEntClients(cfg, l)
 	if err != nil {
-		return nil, fmt.Errorf("postgres: %w", err)
+		return nil, fmt.Errorf("failed to connect to postgres: %w", err)
 	}
-	pgClient := postgres.NewClient(entClient, logger, sentrySvc)
+	client := postgres.NewClient(entClient, l, sentryService)
 	cacheClient := cache.NewInMemoryCache()
 
-	customerRepo := entRepo.NewCustomerRepository(pgClient, logger, cacheClient)
-	invoiceRepo := entRepo.NewInvoiceRepository(pgClient, logger, cacheClient)
-	featureRepo := entRepo.NewFeatureRepository(pgClient, logger, cacheClient)
-	meterRepo := entRepo.NewMeterRepository(pgClient, logger, cacheClient)
-	priceRepo := entRepo.NewPriceRepository(pgClient, logger, cacheClient)
-	planRepo := entRepo.NewPlanRepository(pgClient, logger, cacheClient)
-	subRepo := entRepo.NewSubscriptionRepository(pgClient, logger, cacheClient)
-	subLineItemRepo := entRepo.NewSubscriptionLineItemRepository(pgClient, logger, cacheClient)
-	addonRepo := entRepo.NewAddonRepository(pgClient, logger, cacheClient)
-	settingsRepo := entRepo.NewSettingsRepository(pgClient, logger, cacheClient)
-	eventRepo := chRepo.NewEventRepository(chStore, logger)
-	featureUsageRepo := chRepo.NewFeatureUsageRepository(chStore, logger)
+	// Create repositories
+	customerRepo := entRepo.NewCustomerRepository(client, l, cacheClient)
+	subscriptionRepo := entRepo.NewSubscriptionRepository(client, l, cacheClient)
+	subscriptionLineItemRepo := entRepo.NewSubscriptionLineItemRepository(client, l, cacheClient)
+	subscriptionPhaseRepo := entRepo.NewSubscriptionPhaseRepository(client, l, cacheClient)
+	planRepo := entRepo.NewPlanRepository(client, l, cacheClient)
+	priceRepo := entRepo.NewPriceRepository(client, l, cacheClient)
+	meterRepo := entRepo.NewMeterRepository(client, l, cacheClient)
+	featureRepo := entRepo.NewFeatureRepository(client, l, cacheClient)
+	entitlementRepo := entRepo.NewEntitlementRepository(client, l, cacheClient)
+	addonRepo := entRepo.NewAddonRepository(client, l, cacheClient)
+	addonAssociationRepo := entRepo.NewAddonAssociationRepository(client, l, cacheClient)
+	invoiceRepo := entRepo.NewInvoiceRepository(client, l, cacheClient)
+	settingsRepo := entRepo.NewSettingsRepository(client, l, cacheClient)
+	eventRepo := chRepo.NewEventRepository(chStore, l)
+	processedEventRepo := chRepo.NewProcessedEventRepository(chStore, l)
+	featureUsageRepo := chRepo.NewFeatureUsageRepository(chStore, l)
 
 	serviceParams := service.ServiceParams{
-		Logger:                   logger,
+		Logger:                   l,
 		Config:                   cfg,
-		DB:                       pgClient,
+		DB:                       client,
 		CustomerRepo:             customerRepo,
-		InvoiceRepo:              invoiceRepo,
-		FeatureRepo:              featureRepo,
-		MeterRepo:                meterRepo,
-		PriceRepo:                priceRepo,
+		SubRepo:                  subscriptionRepo,
+		SubscriptionLineItemRepo: subscriptionLineItemRepo,
+		SubscriptionPhaseRepo:    subscriptionPhaseRepo,
 		PlanRepo:                 planRepo,
-		SubRepo:                  subRepo,
-		SubscriptionLineItemRepo: subLineItemRepo,
+		PriceRepo:                priceRepo,
+		MeterRepo:                meterRepo,
+		FeatureRepo:              featureRepo,
+		EntitlementRepo:          entitlementRepo,
 		AddonRepo:                addonRepo,
+		AddonAssociationRepo:     addonAssociationRepo,
+		InvoiceRepo:              invoiceRepo,
 		SettingsRepo:             settingsRepo,
 		EventRepo:                eventRepo,
+		ProcessedEventRepo:       processedEventRepo,
 		FeatureUsageRepo:         featureUsageRepo,
 	}
+
 	featureUsageTrackingService := service.NewFeatureUsageTrackingService(serviceParams, eventRepo, featureUsageRepo)
 
-	return &analyticsInvoiceReconciliationScript{
-		log:                         logger,
-		customerRepo:                customerRepo,
+	return &reconciliationScript{
+		log:                         l,
+		subRepo:                     subscriptionRepo,
 		invoiceRepo:                 invoiceRepo,
+		customerRepo:                customerRepo,
 		featureUsageTrackingService: featureUsageTrackingService,
 	}, nil
 }
