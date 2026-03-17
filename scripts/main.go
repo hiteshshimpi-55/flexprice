@@ -128,6 +128,11 @@ var commands = []Command{
 		Description: "Compare analytics total cost vs invoice subtotals for a period (default 1 Feb–1 Mar); output CSV of diffs",
 		Run:         internal.RunAnalyticsInvoiceReconciliation,
 	},
+	{
+		Name:        "generate-missing-invoices",
+		Description: "Generate missing invoices from reconciliation CSV (use --dry-run=true to preview)",
+		Run:         internal.GenerateMissingInvoices,
+	},
 }
 
 // runBulkReprocessEventsCommand wraps the bulk reprocess events with command line parameters

@@ -85,7 +85,6 @@ func RunAnalyticsInvoiceReconciliation() error {
 	subFilter := types.NewNoLimitSubscriptionFilter()
 	subFilter.SubscriptionStatus = []types.SubscriptionStatus{
 		types.SubscriptionStatusActive,
-		types.SubscriptionStatusCancelled,
 	}
 
 	subs, err := script.subRepo.ListAll(ctx, subFilter)
@@ -202,7 +201,9 @@ func (s *reconciliationScript) processSubscription(ctx context.Context, sub *dom
 	var rows []reconciliationRow
 	for _, period := range periods {
 		row := s.reconcilePeriod(ctx, sub, period, externalCustomerID)
-		rows = append(rows, row)
+		if row != nil {
+			rows = append(rows, *row)
+		}
 	}
 
 	return rows
@@ -251,7 +252,7 @@ func (s *reconciliationScript) computePreviousPeriods(sub *domainSub.Subscriptio
 }
 
 // reconcilePeriod fetches analytics cost and invoice for a single period and returns a CSV row.
-func (s *reconciliationScript) reconcilePeriod(ctx context.Context, sub *domainSub.Subscription, p period, externalCustomerID string) reconciliationRow {
+func (s *reconciliationScript) reconcilePeriod(ctx context.Context, sub *domainSub.Subscription, p period, externalCustomerID string) *reconciliationRow {
 	row := reconciliationRow{
 		CustomerID:     sub.CustomerID,
 		SubscriptionID: sub.ID,
@@ -288,6 +289,8 @@ func (s *reconciliationScript) reconcilePeriod(ctx context.Context, sub *domainS
 
 		diff := analyticsAmount.Sub(inv.Subtotal)
 		row.Diff = diff.StringFixed(2)
+	} else if analyticsAmount.IsZero() {
+		return nil
 	} else {
 		row.InvoiceID = ""
 		row.InvoiceSubtotal = ""
@@ -295,7 +298,7 @@ func (s *reconciliationScript) reconcilePeriod(ctx context.Context, sub *domainS
 		row.Diff = analyticsAmount.StringFixed(2)
 	}
 
-	return row
+	return &row
 }
 
 // findInvoiceForPeriod queries for a subscription invoice matching the given period.
