@@ -215,37 +215,43 @@ type period struct {
 	End   time.Time
 }
 
-// computePreviousPeriods computes N periods before the current period by walking
-// backwards from CurrentPeriodStart using BillingAnchor and BillingPeriod.
+// computePreviousPeriods computes N periods before the current period by safely
+// generating all periods from the start date and taking the last N periods.
+// This properly honors the BillingAnchor, unlike simply subtracting one month from the end date.
 func (s *reconciliationScript) computePreviousPeriods(sub *domainSub.Subscription, count int) []period {
-	periods := make([]period, 0, count)
+	if count <= 0 {
+		return nil
+	}
 
-	// The end of the previous period is the start of the current period
-	prevEnd := sub.CurrentPeriodStart
+	allPeriods, err := types.CalculateBillingPeriods(
+		sub.StartDate,
+		&sub.CurrentPeriodStart,
+		sub.BillingAnchor,
+		sub.BillingPeriodCount,
+		sub.BillingPeriod,
+	)
+	if err != nil {
+		s.log.Warnw("failed to calculate billing periods",
+			"subscription_id", sub.ID,
+			"start_date", sub.StartDate,
+			"current_period_start", sub.CurrentPeriodStart,
+			"billing_anchor", sub.BillingAnchor,
+			"error", err)
+		return nil
+	}
 
-	for i := 0; i < count; i++ {
-		// Calculate previous period start by going backwards one billing interval
-		prevStart, err := types.PreviousBillingDate(prevEnd, 1, sub.BillingPeriod)
-		if err != nil {
-			s.log.Warnw("failed to compute previous billing date",
-				"subscription_id", sub.ID,
-				"prev_end", prevEnd,
-				"billing_period", sub.BillingPeriod,
-				"error", err)
-			break
-		}
+	// We only want up to 'count' periods
+	n := len(allPeriods)
+	take := count
+	if n < count {
+		take = n
+	}
 
-		// Don't go before subscription start date
-		if prevStart.Before(sub.StartDate) {
-			if prevEnd.After(sub.StartDate) {
-				prevStart = sub.StartDate
-			} else {
-				break
-			}
-		}
-
-		periods = append(periods, period{Start: prevStart, End: prevEnd})
-		prevEnd = prevStart
+	periods := make([]period, 0, take)
+	// Output in reverse chronological order to match previous behavior (most recent first)
+	for i := 0; i < take; i++ {
+		p := allPeriods[n-1-i]
+		periods = append(periods, period{Start: p.Start, End: p.End})
 	}
 
 	return periods
