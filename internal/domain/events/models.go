@@ -12,6 +12,7 @@ type UsageAnalyticsParams struct {
 	TenantID           string
 	EnvironmentID      string
 	CustomerID         string
+	SubscriptionID     string // Optional: filter analytics to a specific subscription
 	ExternalCustomerID string
 	FeatureIDs         []string
 	Sources            []string

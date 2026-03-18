@@ -267,9 +267,12 @@ func (s *reconciliationScript) reconcilePeriod(ctx context.Context, sub *domainS
 	}
 
 	// 1. Get analytics cost via featureUsageTrackingService.GetDetailedUsageAnalytics
+	// Filter by subscription_id so we compare subscription-level analytics vs subscription-level invoice
+	// (a customer with multiple subscriptions would otherwise get aggregated analytics)
 	analyticsAmount := decimal.Zero
 	analyticsResp, err := s.featureUsageTrackingService.GetDetailedUsageAnalytics(ctx, &dto.GetUsageAnalyticsRequest{
 		ExternalCustomerID: externalCustomerID,
+		SubscriptionID:     sub.ID,
 		StartTime:          p.Start,
 		EndTime:            p.End,
 	})

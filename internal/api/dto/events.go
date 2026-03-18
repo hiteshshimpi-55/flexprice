@@ -284,6 +284,7 @@ func (r *GetEventsRequest) Validate() error {
 
 type GetUsageAnalyticsRequest struct {
 	ExternalCustomerID string           `json:"external_customer_id" binding:"required"`
+	SubscriptionID     string           `json:"subscription_id,omitempty"` // Optional: filter analytics to a specific subscription (for per-subscription reconciliation)
 	FeatureIDs         []string         `json:"feature_ids,omitempty"`
 	Sources            []string         `json:"sources,omitempty"`
 	StartTime          time.Time        `json:"start_time,omitempty"`

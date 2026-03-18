@@ -713,6 +713,11 @@ func (r *FeatureUsageRepository) getStandardAnalytics(ctx context.Context, param
 		AND sign != 0
 	`, strings.Join(selectColumns, ",\n\t\t\t"))
 
+	if params.SubscriptionID != "" {
+		aggregateQuery += " AND subscription_id = ?"
+		queryParams = append(queryParams, params.SubscriptionID)
+	}
+
 	// Add filters for feature_ids
 	filterParams := []interface{}{}
 	if len(params.FeatureIDs) > 0 {
@@ -1022,6 +1027,10 @@ func (r *FeatureUsageRepository) getMaxBucketTotals(ctx context.Context, params 
 		AND timestamp < ?
 		AND sign != 0`, bucketWindowExpr, strings.Join(innerSelectColumns, ", "))
 
+	if params.SubscriptionID != "" {
+		innerQuery += " AND subscription_id = ?"
+	}
+
 	queryParams := []interface{}{
 		params.TenantID,
 		params.EnvironmentID,
@@ -1029,6 +1038,9 @@ func (r *FeatureUsageRepository) getMaxBucketTotals(ctx context.Context, params 
 		featureInfo.FeatureID,
 		params.StartTime,
 		params.EndTime,
+	}
+	if params.SubscriptionID != "" {
+		queryParams = append(queryParams, params.SubscriptionID)
 	}
 
 	// Add filters for sources to inner query
@@ -1209,6 +1221,10 @@ func (r *FeatureUsageRepository) getMaxBucketPointsForGroup(ctx context.Context,
 		AND timestamp < ?
 		AND sign != 0`, bucketWindowExpr, requestWindowExpr)
 
+	if params.SubscriptionID != "" {
+		innerQuery += " AND subscription_id = ?"
+	}
+
 	queryParams := []interface{}{
 		params.TenantID,
 		params.EnvironmentID,
@@ -1216,6 +1232,9 @@ func (r *FeatureUsageRepository) getMaxBucketPointsForGroup(ctx context.Context,
 		featureInfo.FeatureID,
 		params.StartTime,
 		params.EndTime,
+	}
+	if params.SubscriptionID != "" {
+		queryParams = append(queryParams, params.SubscriptionID)
 	}
 
 	// Add filter for this specific group's source
@@ -1451,6 +1470,10 @@ func (r *FeatureUsageRepository) getSumBucketTotals(ctx context.Context, params 
 		AND timestamp < ?
 		AND sign != 0`, bucketWindowExpr, strings.Join(innerSelectColumns, ", "))
 
+	if params.SubscriptionID != "" {
+		innerQuery += " AND subscription_id = ?"
+	}
+
 	queryParams := []interface{}{
 		params.TenantID,
 		params.EnvironmentID,
@@ -1458,6 +1481,9 @@ func (r *FeatureUsageRepository) getSumBucketTotals(ctx context.Context, params 
 		featureInfo.FeatureID,
 		params.StartTime,
 		params.EndTime,
+	}
+	if params.SubscriptionID != "" {
+		queryParams = append(queryParams, params.SubscriptionID)
 	}
 
 	// Add filters for sources to inner query
@@ -1638,6 +1664,10 @@ func (r *FeatureUsageRepository) getSumBucketPointsForGroup(ctx context.Context,
 		AND timestamp < ?
 		AND sign != 0`, bucketWindowExpr, requestWindowExpr)
 
+	if params.SubscriptionID != "" {
+		innerQuery += " AND subscription_id = ?"
+	}
+
 	queryParams := []interface{}{
 		params.TenantID,
 		params.EnvironmentID,
@@ -1645,6 +1675,9 @@ func (r *FeatureUsageRepository) getSumBucketPointsForGroup(ctx context.Context,
 		featureInfo.FeatureID,
 		params.StartTime,
 		params.EndTime,
+	}
+	if params.SubscriptionID != "" {
+		queryParams = append(queryParams, params.SubscriptionID)
 	}
 
 	// Add filter for this specific group's source
@@ -1859,6 +1892,10 @@ func (r *FeatureUsageRepository) getAnalyticsPoints(
 		AND sign != 0
 	`, strings.Join(selectColumns, ",\n\t\t\t"))
 
+	if params.SubscriptionID != "" {
+		query += " AND subscription_id = ?"
+	}
+
 	// Add filters for the specific analytics item
 	queryParams := []interface{}{
 		params.TenantID,
@@ -1866,6 +1903,9 @@ func (r *FeatureUsageRepository) getAnalyticsPoints(
 		params.CustomerID,
 		params.StartTime,
 		params.EndTime,
+	}
+	if params.SubscriptionID != "" {
+		queryParams = append(queryParams, params.SubscriptionID)
 	}
 
 	// Add feature_id filter if present in analytics
