@@ -38,6 +38,7 @@ import (
 // csvInvoiceRow represents a parsed row from the reconciliation CSV
 type csvInvoiceRow struct {
 	CustomerID       string
+	ExternalCustomerID string
 	SubscriptionID   string
 	InvoiceID        string
 	PeriodStart      time.Time
@@ -140,6 +141,14 @@ func GenerateMissingInvoices() error {
 			}
 		}
 
+		// Fetch external customer ID if not present
+		if filtered[i].ExternalCustomerID == "" {
+			cust, err := params.CustomerRepo.Get(ctx, filtered[i].CustomerID)
+			if err == nil && cust != nil {
+				filtered[i].ExternalCustomerID = cust.ExternalID
+			}
+		}
+
 		// 2.a Check if an invoice already exists for the period
 		if isDryRun {
 			exists, err := params.InvoiceRepo.ExistsForPeriod(ctx, filtered[i].SubscriptionID, filtered[i].PeriodStart, filtered[i].PeriodEnd)
@@ -161,18 +170,19 @@ func GenerateMissingInvoices() error {
 
 	// 3. Print summary (both modes)
 	log.Println("\n=== Invoice Generation Summary ===")
-	log.Printf("%-30s %-30s %-25s %-25s %-12s %-25s %-25s %-20s %-20s %-25s %-15s\n",
-		"SUBSCRIPTION_ID", "CUSTOMER_ID", "PERIOD_START", "PERIOD_END", "ANAL_AMT", "SUB_PER_START", "SUB_PER_END", "START_DATE", "BILLING_ANCHOR", "EXISTING_INV_ID", "STATUS")
-	log.Println(strings.Repeat("-", 260))
+	log.Printf("%-30s %-30s %-30s %-25s %-25s %-12s %-25s %-25s %-20s %-20s %-25s %-15s\n",
+		"SUBSCRIPTION_ID", "CUSTOMER_ID", "EXTERNAL_CUST_ID", "PERIOD_START", "PERIOD_END", "ANAL_AMT", "SUB_PER_START", "SUB_PER_END", "START_DATE", "BILLING_ANCHOR", "EXISTING_INV_ID", "STATUS")
+	log.Println(strings.Repeat("-", 290))
 
 	uniqueSubscriptions := make(map[string]bool)
 	uniqueCustomers := make(map[string]bool)
 	for _, row := range filtered {
 		uniqueSubscriptions[row.SubscriptionID] = true
 		uniqueCustomers[row.CustomerID] = true
-		log.Printf("%-30s %-30s %-25s %-25s %-12.2f %-25s %-25s %-20s %-20s %-25s %-15s\n",
+		log.Printf("%-30s %-30s %-30s %-25s %-25s %-12.2f %-25s %-25s %-20s %-20s %-25s %-15s\n",
 			row.SubscriptionID,
 			row.CustomerID,
+			row.ExternalCustomerID,
 			row.PeriodStart.Format(time.RFC3339),
 			row.PeriodEnd.Format(time.RFC3339),
 			row.AnalyticsAmount,
@@ -308,15 +318,16 @@ func readReconciliationCSV(filePath string) ([]csvInvoiceRow, error) {
 		invoiceGenerated := strings.EqualFold(strings.TrimSpace(record[8]), "true")
 
 		rows = append(rows, csvInvoiceRow{
-			CustomerID:       strings.TrimSpace(record[0]),
-			SubscriptionID:   strings.TrimSpace(record[1]),
-			InvoiceID:        strings.TrimSpace(record[2]),
-			PeriodStart:      periodStart,
-			PeriodEnd:        periodEnd,
-			AnalyticsAmount:  analyticsAmount,
-			InvoiceSubtotal:  strings.TrimSpace(record[6]),
-			Diff:             strings.TrimSpace(record[7]),
-			InvoiceGenerated: invoiceGenerated,
+			CustomerID:         strings.TrimSpace(record[0]),
+			ExternalCustomerID: "", // to be populated from DB
+			SubscriptionID:     strings.TrimSpace(record[1]),
+			InvoiceID:          strings.TrimSpace(record[2]),
+			PeriodStart:        periodStart,
+			PeriodEnd:          periodEnd,
+			AnalyticsAmount:    analyticsAmount,
+			InvoiceSubtotal:    strings.TrimSpace(record[6]),
+			Diff:               strings.TrimSpace(record[7]),
+			InvoiceGenerated:   invoiceGenerated,
 		})
 	}
 
@@ -336,6 +347,7 @@ func writeFilteredReconciliationCSV(rows []csvInvoiceRow, filename string) error
 
 	header := []string{
 		"customer_id",
+		"external_customer_id",
 		"subscription_id",
 		"invoice_id",
 		"period_start",
@@ -358,6 +370,7 @@ func writeFilteredReconciliationCSV(rows []csvInvoiceRow, filename string) error
 	for _, row := range rows {
 		record := []string{
 			row.CustomerID,
+			row.ExternalCustomerID,
 			row.SubscriptionID,
 			row.InvoiceID,
 			row.PeriodStart.Format(time.RFC3339),
