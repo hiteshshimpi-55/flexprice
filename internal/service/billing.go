@@ -340,6 +340,10 @@ func (s *billingService) CalculateUsageCharges(
 			}
 		}
 
+		if item.MeterID == "meter_01KEPHCX3QZW3235WH3BBTGMJ9" {
+			s.Logger.Debugw("processing usage line item with meter ID 'meter_01KEPHCX3QZW3235WH3BBTGMJ9'")
+		}
+
 		if len(matchingCharges) == 0 {
 			s.Logger.Debugw("no matching charge found for usage line item",
 				"subscription_id", sub.ID,
@@ -1657,7 +1661,7 @@ func (s *billingService) PrepareSubscriptionInvoiceRequest(
 		// but don't filter out already invoiced items
 
 		// For current period arrear charges
-		arrearResult, err := s.calculateFeatureUsageCharges(
+		arrearResult, err := s.CalculateCharges(
 			ctx,
 			sub,
 			classification.CurrentPeriodArrear,
@@ -1670,7 +1674,7 @@ func (s *billingService) PrepareSubscriptionInvoiceRequest(
 		}
 
 		// For next period advance charges
-		advanceResult, err := s.calculateFeatureUsageCharges(
+		advanceResult, err := s.CalculateCharges(
 			ctx,
 			sub,
 			classification.NextPeriodAdvance,

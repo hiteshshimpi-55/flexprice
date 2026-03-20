@@ -441,8 +441,6 @@ func (r *subscriptionLineItemRepository) ListBySubscription(ctx context.Context,
 			subscriptionlineitem.EnvironmentID(types.GetEnvironmentID(ctx)),
 		)
 
-	query = r.queryOpts.applyActiveLineItemFilter(query, &sub.CurrentPeriodStart)
-
 	items, err := query.All(ctx)
 	if err != nil {
 		SetSpanError(span, err)

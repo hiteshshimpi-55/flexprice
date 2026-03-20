@@ -133,6 +133,11 @@ var commands = []Command{
 		Description: "Generate missing invoices from reconciliation CSV (use --dry-run=true to preview)",
 		Run:         internal.GenerateMissingInvoices,
 	},
+	{
+		Name:        "recon-csv-enrich",
+		Description: "Enrich recon CSV with external IDs, usage, wallet balances, and final ongoing balance",
+		Run:         internal.RunReconCSVEnrich,
+	},
 }
 
 // runBulkReprocessEventsCommand wraps the bulk reprocess events with command line parameters
@@ -189,6 +194,9 @@ func main() {
 		planID             string
 		addonID            string
 		workerCount        string
+		inputCSV           string
+		outputCSV          string
+		reconMarchUsageEnd string
 	)
 
 	flag.BoolVar(&listCommands, "list", false, "List all available commands")
@@ -212,6 +220,9 @@ func main() {
 	flag.StringVar(&dryRun, "dry-run", "false", "Dry run mode (true/false)")
 	flag.StringVar(&addonID, "addon-id", "", "Addon ID for operations")
 	flag.StringVar(&workerCount, "worker-count", "10", "Number of concurrent workers for parallel processing")
+	flag.StringVar(&inputCSV, "input-csv", "", "Input reconciliation CSV path")
+	flag.StringVar(&outputCSV, "output-csv", "", "Output enriched CSV path")
+	flag.StringVar(&reconMarchUsageEnd, "recon-march-usage-end", "", "March usage end time for reconciliation enrichment (ISO-8601)")
 	flag.Parse()
 
 	if listCommands {
@@ -283,6 +294,15 @@ func main() {
 	}
 	if workerCount != "" {
 		os.Setenv("WORKER_COUNT", workerCount)
+	}
+	if inputCSV != "" {
+		os.Setenv("INPUT_CSV", inputCSV)
+	}
+	if outputCSV != "" {
+		os.Setenv("OUTPUT_CSV", outputCSV)
+	}
+	if reconMarchUsageEnd != "" {
+		os.Setenv("RECON_MARCH_USAGE_END", reconMarchUsageEnd)
 	}
 
 	// Find and run the command

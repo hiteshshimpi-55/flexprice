@@ -2142,6 +2142,10 @@ func (s *subscriptionService) GetUsageBySubscription(ctx context.Context, req *d
 		}
 
 		meterID := lineItem.MeterID
+
+		if lineItem.ID == "subs_line_01KEPHYM1FXWZMGKENW9X326JB" || lineItem.ID == "subs_line_01KJCMAW1FS11E63T3BQT6AE84" {
+			s.Logger.Debugw("including meter for usage calculation")
+		}
 		usageRequest := &dto.GetUsageByMeterRequest{
 			MeterID:            meterID,
 			PriceID:            lineItem.PriceID,
@@ -2150,6 +2154,10 @@ func (s *subscriptionService) GetUsageBySubscription(ctx context.Context, req *d
 			StartTime:          lineItem.GetPeriodStart(usageStartTime),
 			EndTime:            lineItem.GetPeriodEnd(usageEndTime),
 			Filters:            make(map[string][]string),
+		}
+
+		if meterID == "meter_01KEPHCGBC5ZR2WA8P5F2P8Q8G" {
+			s.Logger.Debugw("including meter for usage calculation")
 		}
 
 		for _, filter := range meter.Filters {
@@ -2211,6 +2219,10 @@ func (s *subscriptionService) GetUsageBySubscription(ctx context.Context, req *d
 		meterDisplayName := ""
 		if meter, ok := meterDisplayNames[meterID]; ok {
 			meterDisplayName = meter
+		}
+
+		if meterID == "meter_01KEPHCGBC5ZR2WA8P5F2P8Q8G" {
+			s.Logger.Debugw("including meter for usage calculation")
 		}
 
 		// For bucketed max, we need to handle array of values
