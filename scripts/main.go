@@ -123,6 +123,11 @@ var commands = []Command{
 		Description: "Sync a price to all subscriptions with the same plan and start date by creating new line items",
 		Run:         internal.SyncPriceToSubscriptions,
 	},
+	{
+		Name:        "backfill-invoices",
+		Description: "Backfill missing invoices for subscriptions from their start date to now",
+		Run:         internal.BackfillInvoices,
+	},
 }
 
 // runBulkReprocessEventsCommand wraps the bulk reprocess events with command line parameters
