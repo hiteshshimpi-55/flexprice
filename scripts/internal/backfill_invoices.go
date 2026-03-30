@@ -2,10 +2,12 @@ package internal
 
 import (
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/flexprice/flexprice/internal/api/dto"
@@ -33,6 +35,17 @@ type backfillResult struct {
 	PeriodsSkipped int    `json:"periods_skipped"`
 	PeriodsCreated int    `json:"periods_created"`
 	Error          string `json:"error,omitempty"`
+}
+
+type backfillDryRunRow struct {
+	SubscriptionID    string
+	CustomerID        string
+	PlanID            string
+	BillingPeriod     string
+	PeriodStart       string
+	PeriodEnd         string
+	SubscriptionStart string
+	SubscriptionEnd   string
 }
 
 type backfillInvoicesScript struct {
@@ -93,6 +106,7 @@ func BackfillInvoices() error {
 
 	now := time.Now().UTC()
 	var results []backfillResult
+	var dryRunRows []backfillDryRunRow
 
 	for i, subID := range input.SubscriptionIDs {
 		log.Printf("[%d/%d] Processing subscription: %s", i+1, len(input.SubscriptionIDs), subID)
@@ -165,6 +179,20 @@ func BackfillInvoices() error {
 
 			if isDryRun {
 				log.Printf("  [%d/%d] WOULD CREATE invoice for period %s - %s", j+1, len(periods), period.Start.Format("2006-01-02"), period.End.Format("2006-01-02"))
+				subEnd := ""
+				if sub.EndDate != nil {
+					subEnd = sub.EndDate.Format("2006-01-02")
+				}
+				dryRunRows = append(dryRunRows, backfillDryRunRow{
+					SubscriptionID:    sub.ID,
+					CustomerID:        sub.CustomerID,
+					PlanID:            sub.PlanID,
+					BillingPeriod:     string(sub.BillingPeriod),
+					PeriodStart:       period.Start.Format("2006-01-02"),
+					PeriodEnd:         period.End.Format("2006-01-02"),
+					SubscriptionStart: sub.StartDate.Format("2006-01-02"),
+					SubscriptionEnd:   subEnd,
+				})
 				result.PeriodsCreated++
 				continue
 			}
@@ -213,8 +241,63 @@ func BackfillInvoices() error {
 	log.Printf("Periods: %d created, %d skipped", totalCreated, totalSkipped)
 	if isDryRun {
 		log.Printf("(DRY RUN - no invoices were actually created)")
+
+		if len(dryRunRows) > 0 {
+			if err := writeDryRunCSV(dryRunRows); err != nil {
+				return fmt.Errorf("failed to write dry run CSV: %w", err)
+			}
+		} else {
+			log.Println("No missing invoices found - nothing to export")
+		}
 	}
 
+	return nil
+}
+
+func writeDryRunCSV(rows []backfillDryRunRow) error {
+	timestamp := time.Now().Format("20060102_150405")
+	filename := filepath.Join("scripts", "internal", fmt.Sprintf("backfill_invoices_dry_run_%s.csv", timestamp))
+
+	file, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("failed to create CSV file: %w", err)
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	header := []string{
+		"subscription_id",
+		"customer_id",
+		"plan_id",
+		"billing_period",
+		"period_start",
+		"period_end",
+		"subscription_start",
+		"subscription_end",
+	}
+	if err := writer.Write(header); err != nil {
+		return fmt.Errorf("failed to write CSV header: %w", err)
+	}
+
+	for _, row := range rows {
+		record := []string{
+			row.SubscriptionID,
+			row.CustomerID,
+			row.PlanID,
+			row.BillingPeriod,
+			row.PeriodStart,
+			row.PeriodEnd,
+			row.SubscriptionStart,
+			row.SubscriptionEnd,
+		}
+		if err := writer.Write(record); err != nil {
+			return fmt.Errorf("failed to write CSV row: %w", err)
+		}
+	}
+
+	log.Printf("Dry run results exported to %s (%d rows)", filename, len(rows))
 	return nil
 }
 
