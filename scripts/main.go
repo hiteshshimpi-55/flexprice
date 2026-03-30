@@ -123,6 +123,12 @@ var commands = []Command{
 		Description: "Sync a price to all subscriptions with the same plan and start date by creating new line items",
 		Run:         internal.SyncPriceToSubscriptions,
 	},
+	{
+		Name: "generate-invoices",
+		Description: "Generate deleted draft invoices (customer IDs and min period hardcoded in generate_invoices.go); " +
+			"use -dry-run true for first 10 subs, no DB write, CSV with invoice_json",
+		Run: internal.GenerateInvoices,
+	},
 }
 
 // runBulkReprocessEventsCommand wraps the bulk reprocess events with command line parameters
@@ -178,7 +184,7 @@ func main() {
 		dryRun             string
 		planID             string
 		addonID            string
-		workerCount        string
+		workerCount string
 	)
 
 	flag.BoolVar(&listCommands, "list", false, "List all available commands")
