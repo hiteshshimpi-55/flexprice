@@ -462,14 +462,14 @@ func (s *invoiceService) ComputeInvoice(ctx context.Context, invoiceID string, r
 
 		// Apply credits/coupons and taxes if we have a request
 		// Note: invoice number is assigned later during finalization
-		if applyReq != nil {
-			if err := s.applyCreditsAndCouponsToInvoice(txCtx, inv, *applyReq); err != nil {
-				return err
-			}
-			if err := s.applyTaxesToInvoice(txCtx, inv, *applyReq); err != nil {
-				return err
-			}
-		}
+		// if applyReq != nil {
+		// 	if err := s.applyCreditsAndCouponsToInvoice(txCtx, inv, *applyReq); err != nil {
+		// 		return err
+		// 	}
+		// 	if err := s.applyTaxesToInvoice(txCtx, inv, *applyReq); err != nil {
+		// 		return err
+		// 	}
+		// }
 
 		now := time.Now().UTC()
 		inv.LastComputedAt = &now
@@ -1993,10 +1993,10 @@ func (s *invoiceService) CreateSubscriptionInvoice(ctx context.Context, req *dto
 		return nil, subscription, nil
 	}
 
-	// Process: finalize, sync, attempt payment
-	if err := s.ProcessDraftInvoice(ctx, draft.ID, paymentParams, subscription, flowType); err != nil {
-		return nil, nil, err
-	}
+	// // Process: finalize, sync, attempt payment
+	// if err := s.ProcessDraftInvoice(ctx, draft.ID, paymentParams, subscription, flowType); err != nil {
+	// 	return nil, nil, err
+	// }
 
 	// Return populated invoice (re-fetch for final state)
 	inv, err := s.InvoiceRepo.Get(ctx, draft.ID)
